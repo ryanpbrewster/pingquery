@@ -1,10 +1,13 @@
 use std::pin::Pin;
 
-use crate::proto::api::{ping_query_server::PingQuery, InteractResponse};
+use crate::proto::api::{
+    ping_query_server::PingQuery, ExecRequest, ExecResponse, GetConfigRequest, GetConfigResponse,
+    InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
+};
 use futures_core::Stream;
 use log::trace;
 
-use tonic::Status;
+use tonic::{Request, Response, Status, Streaming};
 
 pub struct PingQueryService;
 
@@ -12,26 +15,23 @@ pub struct PingQueryService;
 impl PingQuery for PingQueryService {
     async fn get_config(
         &self,
-        request: tonic::Request<crate::proto::api::GetConfigRequest>,
-    ) -> Result<tonic::Response<crate::proto::api::GetConfigResponse>, tonic::Status> {
+        request: Request<GetConfigRequest>,
+    ) -> Result<Response<GetConfigResponse>, Status> {
         trace!("get_config: {:?}", request.into_inner());
-        Err(tonic::Status::unimplemented("get_config unimplemented"))
+        Err(Status::unimplemented("get_config unimplemented"))
     }
 
     async fn set_config(
         &self,
-        request: tonic::Request<crate::proto::api::SetConfigRequest>,
-    ) -> Result<tonic::Response<crate::proto::api::SetConfigResponse>, tonic::Status> {
+        request: Request<SetConfigRequest>,
+    ) -> Result<Response<SetConfigResponse>, Status> {
         trace!("set_config: {:?}", request.into_inner());
-        Err(tonic::Status::unimplemented("set_config unimplemented"))
+        Err(Status::unimplemented("set_config unimplemented"))
     }
 
-    async fn exec(
-        &self,
-        request: tonic::Request<crate::proto::api::ExecRequest>,
-    ) -> Result<tonic::Response<crate::proto::api::ExecRequest>, tonic::Status> {
+    async fn exec(&self, request: Request<ExecRequest>) -> Result<Response<ExecResponse>, Status> {
         trace!("exec: {:?}", request.into_inner());
-        Err(tonic::Status::unimplemented("exec unimplemented"))
+        Err(Status::unimplemented("exec unimplemented"))
     }
 
     type InteractStream =
@@ -39,9 +39,9 @@ impl PingQuery for PingQueryService {
 
     async fn interact(
         &self,
-        request: tonic::Request<tonic::Streaming<crate::proto::api::InteractRequest>>,
-    ) -> Result<tonic::Response<Self::InteractStream>, tonic::Status> {
+        request: Request<Streaming<InteractRequest>>,
+    ) -> Result<Response<Self::InteractStream>, Status> {
         trace!("interact: {:?}", request.into_inner());
-        Err(tonic::Status::unimplemented("interact unimplemented"))
+        Err(Status::unimplemented("interact unimplemented"))
     }
 }

@@ -6,7 +6,7 @@ service PingQuery {
   rpc GetConfig (GetConfigRequest) returns (GetConfigResponse) {}
   rpc SetConfig (SetConfigRequest) returns (SetConfigResponse) {}
 
-  rpc Exec (ExecRequest) returns (ExecRequest) {}
+  rpc Exec (ExecRequest) returns (ExecResponse) {}
   rpc Interact (stream InteractRequest) returns (stream InteractResponse) {}
 }
 

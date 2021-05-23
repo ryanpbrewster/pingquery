@@ -154,7 +154,7 @@ pub mod ping_query_client {
         pub async fn exec(
             &mut self,
             request: impl tonic::IntoRequest<super::ExecRequest>,
-        ) -> Result<tonic::Response<super::ExecRequest>, tonic::Status> {
+        ) -> Result<tonic::Response<super::ExecResponse>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
                     tonic::Code::Unknown,
@@ -214,7 +214,7 @@ pub mod ping_query_server {
         async fn exec(
             &self,
             request: tonic::Request<super::ExecRequest>,
-        ) -> Result<tonic::Response<super::ExecRequest>, tonic::Status>;
+        ) -> Result<tonic::Response<super::ExecResponse>, tonic::Status>;
         #[doc = "Server streaming response type for the Interact method."]
         type InteractStream: futures_core::Stream<Item = Result<super::InteractResponse, tonic::Status>>
             + Send
@@ -323,7 +323,7 @@ pub mod ping_query_server {
                     #[allow(non_camel_case_types)]
                     struct ExecSvc<T: PingQuery>(pub Arc<T>);
                     impl<T: PingQuery> tonic::server::UnaryService<super::ExecRequest> for ExecSvc<T> {
-                        type Response = super::ExecRequest;
+                        type Response = super::ExecResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
