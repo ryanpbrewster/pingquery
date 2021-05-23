@@ -5,6 +5,7 @@ pub mod proto {
 
 mod config;
 pub mod server;
+pub mod value;
 
 #[cfg(test)]
 mod test {

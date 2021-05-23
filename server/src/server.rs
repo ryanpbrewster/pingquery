@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     convert::TryInto,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -10,6 +11,7 @@ use crate::{
         ping_query_server::PingQuery, ExecRequest, ExecResponse, GetConfigRequest,
         GetConfigResponse, InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
     },
+    value::Value,
 };
 use futures_core::Stream;
 use log::trace;
@@ -90,18 +92,20 @@ impl PingQuery for PingQueryService {
         let raw_sql = request.into_inner().raw_sql;
         let lock = self.data.lock().unwrap();
         let mut stmt = lock.prepare(&raw_sql).unwrap();
-        let rows: Vec<Vec<String>> = stmt
+        let rows: Vec<BTreeMap<String, Value>> = stmt
             .query_map([], |row| {
                 Ok(row
                     .column_names()
                     .into_iter()
-                    .map(|s| s.to_owned())
+                    .map(|s| (s.to_owned(), row.get_unwrap(s)))
                     .collect())
             })
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        Ok(Response::new(ExecResponse { rows: vec![] }))
+        Ok(Response::new(ExecResponse {
+            rows: rows.into_iter().map(|r| r.into()).collect(),
+        }))
     }
 
     type InteractStream =
