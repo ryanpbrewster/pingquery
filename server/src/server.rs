@@ -14,7 +14,7 @@ impl PingQuery for PingQueryService {
         &self,
         request: tonic::Request<crate::proto::api::GetConfigRequest>,
     ) -> Result<tonic::Response<crate::proto::api::GetConfigResponse>, tonic::Status> {
-        trace!("get_config: {:?}", request);
+        trace!("get_config: {:?}", request.into_inner());
         Err(tonic::Status::unimplemented("get_config unimplemented"))
     }
 
@@ -22,7 +22,7 @@ impl PingQuery for PingQueryService {
         &self,
         request: tonic::Request<crate::proto::api::SetConfigRequest>,
     ) -> Result<tonic::Response<crate::proto::api::SetConfigResponse>, tonic::Status> {
-        trace!("set_config: {:?}", request);
+        trace!("set_config: {:?}", request.into_inner());
         Err(tonic::Status::unimplemented("set_config unimplemented"))
     }
 
@@ -30,7 +30,7 @@ impl PingQuery for PingQueryService {
         &self,
         request: tonic::Request<crate::proto::api::ExecRequest>,
     ) -> Result<tonic::Response<crate::proto::api::ExecRequest>, tonic::Status> {
-        trace!("exec: {:?}", request);
+        trace!("exec: {:?}", request.into_inner());
         Err(tonic::Status::unimplemented("exec unimplemented"))
     }
 
@@ -41,7 +41,7 @@ impl PingQuery for PingQueryService {
         &self,
         request: tonic::Request<tonic::Streaming<crate::proto::api::InteractRequest>>,
     ) -> Result<tonic::Response<Self::InteractStream>, tonic::Status> {
-        trace!("interact: {:?}", request);
+        trace!("interact: {:?}", request.into_inner());
         Err(tonic::Status::unimplemented("interact unimplemented"))
     }
 }
