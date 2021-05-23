@@ -16,8 +16,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let metadata_connection =
         rusqlite::Connection::open_with_flags(flags.metadata, OpenFlags::default())?;
+    let data_connection = rusqlite::Connection::open_with_flags(flags.data, OpenFlags::default())?;
     let service = PingQueryService {
         metadata: Arc::new(Mutex::new(metadata_connection)),
+        data: Arc::new(Mutex::new(data_connection)),
     };
 
     let addr = "[::1]:50051".parse().unwrap();
@@ -32,6 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[derive(StructOpt)]
 struct CliFlags {
+    #[structopt(long)]
+    data: PathBuf,
     #[structopt(long)]
     metadata: PathBuf,
 }

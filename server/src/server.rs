@@ -18,6 +18,7 @@ use tonic::{Request, Response, Status, Streaming};
 
 pub struct PingQueryService {
     pub metadata: Arc<Mutex<rusqlite::Connection>>,
+    pub data: Arc<Mutex<rusqlite::Connection>>,
 }
 
 #[tonic::async_trait]
@@ -26,7 +27,7 @@ impl PingQuery for PingQueryService {
         &self,
         request: Request<GetConfigRequest>,
     ) -> Result<Response<GetConfigResponse>, Status> {
-        trace!("get_config: {:?}", request.into_inner());
+        trace!("get_config: {:?}", request.get_ref());
         let mut lock = self.metadata.lock().unwrap();
         let txn = lock.transaction().unwrap();
         init_tables(&txn);
@@ -85,8 +86,22 @@ impl PingQuery for PingQueryService {
     }
 
     async fn exec(&self, request: Request<ExecRequest>) -> Result<Response<ExecResponse>, Status> {
-        trace!("exec: {:?}", request.into_inner());
-        Err(Status::unimplemented("exec unimplemented"))
+        trace!("exec: {:?}", request.get_ref());
+        let raw_sql = request.into_inner().raw_sql;
+        let lock = self.data.lock().unwrap();
+        let mut stmt = lock.prepare(&raw_sql).unwrap();
+        let rows: Vec<Vec<String>> = stmt
+            .query_map([], |row| {
+                Ok(row
+                    .column_names()
+                    .into_iter()
+                    .map(|s| s.to_owned())
+                    .collect())
+            })
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        Ok(Response::new(ExecResponse { rows: vec![] }))
     }
 
     type InteractStream =
@@ -96,7 +111,7 @@ impl PingQuery for PingQueryService {
         &self,
         request: Request<Streaming<InteractRequest>>,
     ) -> Result<Response<Self::InteractStream>, Status> {
-        trace!("interact: {:?}", request.into_inner());
+        trace!("interact: {:?}", request.get_ref());
         Err(Status::unimplemented("interact unimplemented"))
     }
 }
