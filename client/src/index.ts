@@ -3,7 +3,8 @@ import Client from "./wrapper";
 
 async function main() {
   const client = new Client("localhost:50051");
-  await client.getConfig(new GetConfigRequest());
+  const config = await client.getConfig(new GetConfigRequest());
+  console.log(config.toObject());
 
   const execRequest = new ExecRequest();
   execRequest.setRawSql(`SELECT * FROM word_counts`);
