@@ -31,11 +31,11 @@ export default class Client {
     );
   }
 
-  async exec(request: ExecRequest): Promise<ExecResponse> {
+  async exec(raw_sql: string): Promise<ExecResponse> {
+    const req = new ExecRequest();
+    req.setRawSql(raw_sql);
     return new Promise((resolve, reject) =>
-      this.inner.exec(request, (err, resp) =>
-        resp ? resolve(resp) : reject(err)
-      )
+      this.inner.exec(req, (err, resp) => (resp ? resolve(resp) : reject(err)))
     );
   }
 }

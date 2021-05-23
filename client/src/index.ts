@@ -36,15 +36,16 @@ async function main() {
     JSON.stringify((await client.setConfig(setConfigRequest)).toObject())
   );
 
-  const execRequest = new ExecRequest();
-  execRequest.setRawSql(`
+  const execResp1 = await client.exec(`
     CREATE TABLE IF NOT EXISTS word_counts (
       word TEXT NOT NULL PRIMARY KEY,
       count INTEGER NOT NULL
     )
   `);
-  const execResponse = await client.exec(execRequest);
-  console.log(execResponse.getRowsList());
+  console.log(JSON.stringify(execResp1.toObject(), null, 2));
+
+  const execResp2 = await client.exec(`SELECT * FROM word_counts`);
+  console.log(JSON.stringify(execResp2.toObject(), null, 2));
 }
 
 main().catch((err) => console.error(err));
