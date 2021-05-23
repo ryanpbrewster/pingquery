@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package pingquery.api;
+
+service PingQuery {
+  rpc GetConfig (GetConfigRequest) returns (GetConfigResponse) {}
+  rpc SetConfig (SetConfigRequest) returns (SetConfigResponse) {}
+
+  rpc Exec (ExecRequest) returns (ExecRequest) {}
+  rpc Interact (stream InteractRequest) returns (stream InteractResponse) {}
+}
+
+message GetConfigRequest {}
+
+message GetConfigResponse {
+  Config config = 1;
+}
+
+message SetConfigRequest {
+  Config config = 1;
+}
+
+message SetConfigResponse {}
+
+message ExecRequest {
+  string raw_sql = 1;
+}
+
+message ExecResponse {
+  repeated Row rows = 1;
+}
+
+message InteractRequest {
+  /// An identifier that the server will echo back with any response related to this request.
+  /// Must be monotonically increasing.
+  int32 id = 1;
+
+  oneof type {
+    Statement mutate = 2;
+    Statement query = 3;
+    Statement listen = 4;
+  }
+}
+
+message InteractResponse {
+  /// The identifier of the request that generated this response.
+  int32 id = 1;
+}
+
+message Config {
+  repeated StatementConfig queries = 1;
+  repeated StatementConfig mutates = 2;
+}
+
+message StatementConfig {
+  string name = 1;
+  string sql_template = 2;
+}
+
+message Statement {
+  string name = 1;
+  map<string, Value> params = 2;
+}
+
+message Value {
+  oneof type {
+    int64 integer = 1;
+    string text = 2;
+  }
+}
+
+message Row {
+  map<string, Value> columns = 1;
+}
