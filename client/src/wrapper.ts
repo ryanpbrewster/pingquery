@@ -8,22 +8,20 @@ export default class Client {
     this.inner = new PingQueryClient(address, credentials.createInsecure());
   }
 
-  async getConfig(
-    request: api.GetConfigRequest
-  ): Promise<api.GetConfigResponse> {
+  async getConfig(): Promise<Config> {
     return new Promise((resolve, reject) =>
-      this.inner.getConfig(request, (err, resp) =>
-        resp ? resolve(resp) : reject(err)
+      this.inner.getConfig(new api.GetConfigRequest(), (err, resp) =>
+        resp ? resolve(configFromProto(resp.getConfig()!)!) : reject(err)
       )
     );
   }
 
-  async setConfig(
-    request: api.SetConfigRequest
-  ): Promise<api.SetConfigResponse> {
+  async setConfig(config: Config): Promise<void> {
+    const request = new api.SetConfigRequest();
+    request.setConfig(configToProto(config));
     return new Promise((resolve, reject) =>
       this.inner.setConfig(request, (err, resp) =>
-        resp ? resolve(resp) : reject(err)
+        resp ? resolve() : reject(err)
       )
     );
   }
@@ -41,9 +39,22 @@ export default class Client {
   }
 }
 
-type ObjectMap<T> = { [key: string]: T };
-type Value = string | number;
-type Row = ObjectMap<Value>;
+export interface Config {
+  readonly queries: readonly QueryConfig[];
+  readonly mutates: readonly MutateConfig[];
+}
+export interface QueryConfig {
+  readonly name: string;
+  readonly sql_template: string;
+}
+export interface MutateConfig {
+  readonly name: string;
+  readonly sql_template: string;
+}
+
+export type ObjectMap<T> = { [key: string]: T };
+export type Value = string | number;
+export type Row = ObjectMap<Value>;
 
 function valueToProto(v: Value): api.Value {
   const p = new api.Value();
@@ -77,4 +88,50 @@ function rowFromProto(p: api.Row): Row {
     }
   });
   return out;
+}
+
+function configToProto(config: Config): api.Config {
+  const p = new api.Config();
+  for (const q of config.queries) {
+    p.addQueries(queryConfigToProto(q));
+  }
+  for (const m of config.mutates) {
+    p.addMutates(mutateConfigToProto(m));
+  }
+  return p;
+}
+
+function queryConfigToProto(q: QueryConfig): api.StatementConfig {
+  const p = new api.StatementConfig();
+  p.setName(q.name);
+  p.setSqlTemplate(q.sql_template);
+  return p;
+}
+
+function mutateConfigToProto(m: MutateConfig): api.StatementConfig {
+  const p = new api.StatementConfig();
+  p.setName(m.name);
+  p.setSqlTemplate(m.sql_template);
+  return p;
+}
+
+function configFromProto(p: api.Config): Config | null {
+  return {
+    queries: p.getQueriesList().map(queryConfigFromProto),
+    mutates: p.getMutatesList().map(mutateConfigFromProto),
+  };
+}
+
+function queryConfigFromProto(p: api.StatementConfig): QueryConfig {
+  return {
+    name: p.getName(),
+    sql_template: p.getSqlTemplate(),
+  };
+}
+
+function mutateConfigFromProto(p: api.StatementConfig): MutateConfig {
+  return {
+    name: p.getName(),
+    sql_template: p.getSqlTemplate(),
+  };
 }
