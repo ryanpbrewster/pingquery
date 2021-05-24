@@ -118,7 +118,15 @@ impl PingQuery for PingQueryService {
         request: Request<Streaming<InteractRequest>>,
     ) -> Result<Response<Self::InteractStream>, Status> {
         trace!("interact: {:?}", request.get_ref());
-        Err(Status::unimplemented("interact unimplemented"))
+        let mut input = request.into_inner();
+        let output = async_stream::try_stream! {
+            while let Some(req) = input.message().await? {
+                trace!("interact: {:?}", req);
+                yield InteractResponse::default();
+            }
+        };
+
+        Ok(Response::new(Box::pin(output) as Self::InteractStream))
     }
 }
 

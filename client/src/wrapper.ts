@@ -1,5 +1,5 @@
 import { PingQueryClient } from "./proto/api_grpc_pb";
-import { credentials } from "@grpc/grpc-js";
+import { ClientDuplexStream, credentials } from "@grpc/grpc-js";
 import * as api from "./proto/api_pb";
 
 export default class Client {
@@ -36,6 +36,10 @@ export default class Client {
           : reject(err);
       })
     );
+  }
+
+  interact(): ClientDuplexStream<api.InteractRequest, api.InteractResponse> {
+    return this.inner.interact();
   }
 }
 
