@@ -42,10 +42,10 @@ async function main() {
       count INTEGER NOT NULL
     )
   `);
-  console.log(JSON.stringify(execResp1.toObject(), null, 2));
+  console.log(execResp1);
 
   const execResp2 = await client.exec(`SELECT * FROM word_counts`);
-  console.log(JSON.stringify(execResp2.toObject(), null, 2));
+  console.log(execResp2);
 }
 
 main().catch((err) => console.error(err));

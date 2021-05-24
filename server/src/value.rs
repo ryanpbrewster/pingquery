@@ -5,6 +5,7 @@ use tonic::Status;
 
 use crate::proto::api;
 
+#[derive(Debug)]
 pub enum Value {
     Integer(i64),
     Text(String),

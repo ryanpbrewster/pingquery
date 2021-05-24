@@ -94,11 +94,13 @@ impl PingQuery for PingQueryService {
         let mut stmt = lock.prepare(&raw_sql).unwrap();
         let rows: Vec<BTreeMap<String, Value>> = stmt
             .query_map([], |row| {
-                Ok(row
+                let row = row
                     .column_names()
                     .into_iter()
                     .map(|s| (s.to_owned(), row.get_unwrap(s)))
-                    .collect())
+                    .collect();
+                trace!("row = {:?}", row);
+                Ok(row)
             })
             .unwrap()
             .collect::<Result<_, _>>()
