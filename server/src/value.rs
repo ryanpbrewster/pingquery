@@ -11,6 +11,10 @@ pub enum Value {
     Text(String),
 }
 
+pub struct Row {
+    pub columns: BTreeMap<String, Value>,
+}
+
 impl TryFrom<api::Value> for Value {
     type Error = Status;
 
@@ -71,10 +75,10 @@ impl FromSql for Value {
     }
 }
 
-impl From<BTreeMap<String, Value>> for api::Row {
-    fn from(row: BTreeMap<String, Value>) -> Self {
+impl From<Row> for api::Row {
+    fn from(row: Row) -> Self {
         api::Row {
-            columns: row.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            columns: row.columns.into_iter().map(|(k, v)| (k, v.into())).collect(),
         }
     }
 }

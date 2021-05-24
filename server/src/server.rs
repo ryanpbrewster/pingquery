@@ -1,18 +1,10 @@
 use std::{
-    collections::BTreeMap,
     convert::TryInto,
     pin::Pin,
     sync::{Arc, Mutex},
 };
 
-use crate::{
-    config::{Config, MutateConfig, QueryConfig},
-    proto::api::{
-        ping_query_server::PingQuery, ExecRequest, ExecResponse, GetConfigRequest,
-        GetConfigResponse, InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
-    },
-    value::Value,
-};
+use crate::{config::{Config, MutateConfig, QueryConfig, Statement}, proto::api::{ExecRequest, ExecResponse, GetConfigRequest, GetConfigResponse, InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse, interact_request::Type, ping_query_server::{PingQuery, PingQueryServer}}, value::{Row, Value}};
 use futures_core::Stream;
 use log::trace;
 
@@ -92,15 +84,15 @@ impl PingQuery for PingQueryService {
         let raw_sql = request.into_inner().raw_sql;
         let lock = self.data.lock().unwrap();
         let mut stmt = lock.prepare(&raw_sql).unwrap();
-        let rows: Vec<BTreeMap<String, Value>> = stmt
+        let rows: Vec<Row> = stmt
             .query_map([], |row| {
-                let row = row
+                let columns = row
                     .column_names()
                     .into_iter()
                     .map(|s| (s.to_owned(), row.get_unwrap(s)))
                     .collect();
-                trace!("row = {:?}", row);
-                Ok(row)
+                trace!("row = {:?}", columns);
+                Ok(Row { columns })
             })
             .unwrap()
             .collect::<Result<_, _>>()
@@ -119,15 +111,55 @@ impl PingQuery for PingQueryService {
     ) -> Result<Response<Self::InteractStream>, Status> {
         trace!("interact: {:?}", request.get_ref());
         let mut input = request.into_inner();
+        let (metadata, data) = (self.metadata.clone(), self.data.clone());
         let output = async_stream::try_stream! {
             while let Some(req) = input.message().await? {
                 trace!("interact: {:?}", req);
-                yield InteractResponse::default();
+                let rows: Vec<Row> = match req.r#type {
+                    None => {
+                        continue;
+                    },
+                    Some(Type::Mutate(mutate)) => {
+                        handle_mutate(&metadata.lock().unwrap(), &data.lock().unwrap(), mutate.try_into()?)?
+                    }
+                    Some(Type::Query(query)) => {
+                        handle_query(&metadata.lock().unwrap(), &data.lock().unwrap(), query.try_into()?)?
+                    }
+                    Some(Type::Listen(query)) => {
+                        handle_listen(&metadata.lock().unwrap(), &data.lock().unwrap(), query.try_into()?)?;
+                        vec![]
+                    }
+                };
+                yield InteractResponse {
+                    id: req.id,
+                    rows: rows.into_iter().map(|row| row.into()).collect(),
+                };
             }
         };
-
         Ok(Response::new(Box::pin(output) as Self::InteractStream))
     }
+}
+
+fn handle_mutate(
+    metadata: &rusqlite::Connection,
+    data: &rusqlite::Connection,
+    mutate: Statement,
+) -> Result<Vec<Row>, Status> {
+    Err(Status::unimplemented("mutate unimplemented"))
+}
+fn handle_query(
+    metadata: &rusqlite::Connection,
+    data: &rusqlite::Connection,
+    query: Statement,
+) -> Result<Vec<Row>, Status> {
+    Err(Status::unimplemented("query unimplemented"))
+}
+fn handle_listen(
+    metadata: &rusqlite::Connection,
+    data: &rusqlite::Connection,
+    mutate: Statement,
+) -> Result<Vec<Row>, Status> {
+    Err(Status::unimplemented("listen unimplemented"))
 }
 
 fn init_tables(txn: &rusqlite::Transaction) {

@@ -1,4 +1,4 @@
-import { InteractRequest } from "./proto/api_pb";
+import { InteractRequest, InteractResponse } from "./proto/api_pb";
 import Client, { Config } from "./wrapper";
 
 const client = new Client("localhost:50051");
@@ -32,9 +32,25 @@ describe("inspect", () => {
 
     const stream = client.interact();
 
+    const [promise, resolve] = deferred();
+
+    stream.on("data", (data: InteractResponse) => {
+      resolve(data.toObject());
+    });
+
     const w = new InteractRequest();
     stream.write(w);
 
-    stream.cancel();
+    console.log("DATA = ", await promise);
+
+    stream.end();
   });
 });
+
+function deferred<T>(): [Promise<T>, (v: T) => void] {
+  let resolve: (v: T) => void = () => {};
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return [promise, resolve];
+}

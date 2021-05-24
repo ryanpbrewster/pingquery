@@ -48,6 +48,8 @@ pub struct InteractResponse {
     //// The identifier of the request that generated this response.
     #[prost(int32, tag = "1")]
     pub id: i32,
+    #[prost(message, repeated, tag = "2")]
+    pub rows: ::prost::alloc::vec::Vec<Row>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Config {

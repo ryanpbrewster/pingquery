@@ -4,7 +4,7 @@ use std::{
 };
 use tonic::Status;
 
-use crate::proto::api;
+use crate::{proto::api, value::Value};
 
 #[derive(Debug)]
 pub struct Config {
@@ -22,6 +22,11 @@ pub struct QueryConfig {
 pub struct MutateConfig {
     pub name: String,
     pub sql_template: String,
+}
+
+pub struct Statement {
+    pub name: String,
+    pub params: BTreeMap<String, Value>,
 }
 
 impl From<Config> for api::Config {
@@ -103,6 +108,19 @@ impl TryFrom<api::StatementConfig> for MutateConfig {
             } else {
                 value.sql_template
             },
+        })
+    }
+}
+
+impl TryFrom<api::Statement> for Statement {
+    type Error = Status;
+
+    fn try_from(proto: api::Statement) -> Result<Self, Self::Error> {
+        Ok(Statement {
+            name: proto.name,
+            params: proto.params.into_iter().map(|(k, v)| {
+                Ok((k, v.try_into()?))
+            }).collect::<Result<BTreeMap<String, Value>, Status>>()?,
         })
     }
 }
