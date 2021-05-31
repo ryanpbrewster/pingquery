@@ -1,8 +1,4 @@
-use std::{
-    convert::TryInto,
-    pin::Pin,
-    sync::{Arc, Mutex},
-};
+use std::{convert::TryInto, pin::Pin};
 
 use crate::{
     config::{Config, MutateConfig, QueryConfig},
@@ -15,11 +11,13 @@ use crate::{
 use futures_core::Stream;
 use log::trace;
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use tonic::{Request, Response, Status, Streaming};
 
 pub struct PingQueryService {
-    pub metadata: Arc<Mutex<rusqlite::Connection>>,
-    pub data: Arc<Mutex<rusqlite::Connection>>,
+    pub metadata: Pool<SqliteConnectionManager>,
+    pub data: Pool<SqliteConnectionManager>,
 }
 
 #[tonic::async_trait]
@@ -29,8 +27,8 @@ impl PingQuery for PingQueryService {
         request: Request<GetConfigRequest>,
     ) -> Result<Response<GetConfigResponse>, Status> {
         trace!("get_config: {:?}", request.get_ref());
-        let mut lock = self.metadata.lock().unwrap();
-        let txn = lock.transaction().unwrap();
+        let mut conn = self.metadata.get().unwrap();
+        let txn = conn.transaction().unwrap();
         init_tables(&txn);
         let queries: Vec<QueryConfig> = {
             let mut stmt = txn.prepare("SELECT * FROM queries").unwrap();
@@ -77,8 +75,8 @@ impl PingQuery for PingQueryService {
             .ok_or(Status::invalid_argument("missing config"))?
             .try_into()?;
 
-        let mut lock = self.metadata.lock().unwrap();
-        let txn = lock.transaction().unwrap();
+        let mut conn = self.metadata.get().unwrap();
+        let txn = conn.transaction().unwrap();
         init_tables(&txn);
         clear_tables(&txn);
         write_tables(&txn, config);
@@ -89,8 +87,8 @@ impl PingQuery for PingQueryService {
     async fn exec(&self, request: Request<ExecRequest>) -> Result<Response<ExecResponse>, Status> {
         trace!("exec: {:?}", request.get_ref());
         let raw_sql = request.into_inner().raw_sql;
-        let lock = self.data.lock().unwrap();
-        let mut stmt = lock.prepare(&raw_sql).unwrap();
+        let conn = self.data.get().unwrap();
+        let mut stmt = conn.prepare(&raw_sql).unwrap();
         let rows: Vec<Row> = stmt
             .query_map([], |row| {
                 let columns = row

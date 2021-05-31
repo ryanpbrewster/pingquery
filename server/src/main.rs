@@ -1,11 +1,9 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::path::PathBuf;
 
 use log::info;
 use pingquery::{proto::api::ping_query_server::PingQueryServer, server::PingQueryService};
-use rusqlite::OpenFlags;
+use r2d2_sqlite::SqliteConnectionManager;
+
 use structopt::StructOpt;
 use tonic::transport::Server;
 
@@ -14,17 +12,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let flags = CliFlags::from_args();
 
-    let metadata_connection = match flags.metadata {
-        None => rusqlite::Connection::open_in_memory()?,
-        Some(path) => rusqlite::Connection::open_with_flags(path, OpenFlags::default())?,
-    };
-    let data_connection = match flags.data {
-        None => rusqlite::Connection::open_in_memory()?,
-        Some(path) => rusqlite::Connection::open_with_flags(path, OpenFlags::default())?,
-    };
     let service = PingQueryService {
-        metadata: Arc::new(Mutex::new(metadata_connection)),
-        data: Arc::new(Mutex::new(data_connection)),
+        metadata: sqlite(flags.metadata)?,
+        data: sqlite(flags.data)?,
     };
 
     let addr = "[::1]:50051".parse().unwrap();
@@ -43,4 +33,12 @@ struct CliFlags {
     data: Option<PathBuf>,
     #[structopt(long)]
     metadata: Option<PathBuf>,
+}
+
+fn sqlite(path: Option<PathBuf>) -> Result<r2d2::Pool<SqliteConnectionManager>, r2d2::Error> {
+    let manager = match path {
+        None => SqliteConnectionManager::memory(),
+        Some(path) => SqliteConnectionManager::file(path),
+    };
+    r2d2::Pool::new(manager)
 }
