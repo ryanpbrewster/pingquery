@@ -1,14 +1,13 @@
-use std::sync::Arc;
+use std::{convert::TryInto, sync::Arc};
 
 use crate::{
+    config::Config,
     persistence::Persistence,
     proto::api::{
         ping_query_server::PingQuery, ExecRequest, ExecResponse, GetConfigRequest,
         GetConfigResponse, InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
     },
 };
-
-use log::trace;
 
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
@@ -21,24 +20,28 @@ pub struct PingQueryService {
 impl PingQuery for PingQueryService {
     async fn get_config(
         &self,
-        request: Request<GetConfigRequest>,
+        _request: Request<GetConfigRequest>,
     ) -> Result<Response<GetConfigResponse>, Status> {
-        trace!("get_config: {:?}", request.get_ref());
-        let resp = self.persistence.get_config(request.into_inner()).await?;
-        Ok(Response::new(resp))
+        let config = self.persistence.get_config().await?;
+        Ok(Response::new(GetConfigResponse {
+            config: Some(config.into()),
+        }))
     }
 
     async fn set_config(
         &self,
         request: Request<SetConfigRequest>,
     ) -> Result<Response<SetConfigResponse>, Status> {
-        trace!("set_config: {:?}", request.get_ref());
-        self.persistence.set_config(request.into_inner()).await?;
+        let config: Config = request
+            .into_inner()
+            .config
+            .ok_or(Status::invalid_argument("missing config"))?
+            .try_into()?;
+        self.persistence.set_config(config).await?;
         Ok(Response::new(SetConfigResponse::default()))
     }
 
     async fn exec(&self, request: Request<ExecRequest>) -> Result<Response<ExecResponse>, Status> {
-        trace!("exec: {:?}", request.get_ref());
         let resp = self.persistence.exec(request.into_inner()).await?;
         Ok(Response::new(resp))
     }
@@ -49,7 +52,6 @@ impl PingQuery for PingQueryService {
         &self,
         request: Request<Streaming<InteractRequest>>,
     ) -> Result<Response<Self::InteractStream>, Status> {
-        trace!("interact: [START]");
         let persistence = self.persistence.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         let inputs = request.into_inner();

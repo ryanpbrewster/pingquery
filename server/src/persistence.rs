@@ -1,13 +1,9 @@
-use std::convert::TryInto;
-
 use crate::{
     config::{Config, MutateConfig, QueryConfig},
-    proto::api::{
-        ExecRequest, ExecResponse, GetConfigRequest, GetConfigResponse, InteractRequest,
-        InteractResponse, SetConfigRequest, SetConfigResponse,
-    },
+    proto::api::{ExecRequest, ExecResponse, InteractRequest, InteractResponse},
     value::Row,
 };
+
 use log::trace;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -20,8 +16,8 @@ pub struct Persistence {
 }
 
 impl Persistence {
-    pub async fn get_config(&self, request: GetConfigRequest) -> Result<GetConfigResponse, Status> {
-        trace!("get_config: {:?}", request);
+    pub async fn get_config(&self) -> Result<Config, Status> {
+        trace!("get_config");
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
         init_tables(&txn);
@@ -54,17 +50,11 @@ impl Persistence {
             queries: queries.into_iter().map(|c| (c.name.clone(), c)).collect(),
             mutates: mutates.into_iter().map(|c| (c.name.clone(), c)).collect(),
         };
-        Ok(GetConfigResponse {
-            config: Some(config.into()),
-        })
+        Ok(config)
     }
 
-    pub async fn set_config(&self, request: SetConfigRequest) -> Result<SetConfigResponse, Status> {
-        trace!("set_config: {:?}", request);
-        let config: Config = request
-            .config
-            .ok_or(Status::invalid_argument("missing config"))?
-            .try_into()?;
+    pub async fn set_config(&self, config: Config) -> Result<(), Status> {
+        trace!("set_config: {:?}", config);
 
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
@@ -72,7 +62,7 @@ impl Persistence {
         clear_tables(&txn);
         write_tables(&txn, config);
         txn.commit().unwrap();
-        Ok(SetConfigResponse::default())
+        Ok(())
     }
 
     pub async fn exec(&self, request: ExecRequest) -> Result<ExecResponse, Status> {
