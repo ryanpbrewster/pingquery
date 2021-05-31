@@ -118,9 +118,11 @@ impl TryFrom<api::Statement> for Statement {
     fn try_from(proto: api::Statement) -> Result<Self, Self::Error> {
         Ok(Statement {
             name: proto.name,
-            params: proto.params.into_iter().map(|(k, v)| {
-                Ok((k, v.try_into()?))
-            }).collect::<Result<BTreeMap<String, Value>, Status>>()?,
+            params: proto
+                .params
+                .into_iter()
+                .map(|(k, v)| Ok((k, v.try_into()?)))
+                .collect::<Result<BTreeMap<String, Value>, Status>>()?,
         })
     }
 }

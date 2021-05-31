@@ -14,9 +14,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let flags = CliFlags::from_args();
 
-    let metadata_connection =
-        rusqlite::Connection::open_with_flags(flags.metadata, OpenFlags::default())?;
-    let data_connection = rusqlite::Connection::open_with_flags(flags.data, OpenFlags::default())?;
+    let metadata_connection = match flags.metadata {
+        None => rusqlite::Connection::open_in_memory()?,
+        Some(path) => rusqlite::Connection::open_with_flags(path, OpenFlags::default())?,
+    };
+    let data_connection = match flags.data {
+        None => rusqlite::Connection::open_in_memory()?,
+        Some(path) => rusqlite::Connection::open_with_flags(path, OpenFlags::default())?,
+    };
     let service = PingQueryService {
         metadata: Arc::new(Mutex::new(metadata_connection)),
         data: Arc::new(Mutex::new(data_connection)),
@@ -35,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[derive(StructOpt)]
 struct CliFlags {
     #[structopt(long)]
-    data: PathBuf,
+    data: Option<PathBuf>,
     #[structopt(long)]
-    metadata: PathBuf,
+    metadata: Option<PathBuf>,
 }

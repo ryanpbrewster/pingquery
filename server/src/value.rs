@@ -78,7 +78,11 @@ impl FromSql for Value {
 impl From<Row> for api::Row {
     fn from(row: Row) -> Self {
         api::Row {
-            columns: row.columns.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            columns: row
+                .columns
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
         }
     }
 }
