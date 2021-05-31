@@ -1,4 +1,4 @@
-use std::{convert::TryInto, pin::Pin};
+use std::convert::TryInto;
 
 use crate::{
     config::{Config, MutateConfig, QueryConfig},
@@ -8,11 +8,12 @@ use crate::{
     },
     value::Row,
 };
-use futures_core::Stream;
+
 use log::trace;
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 
 pub struct PingQueryService {
@@ -107,15 +108,22 @@ impl PingQuery for PingQueryService {
         }))
     }
 
-    type InteractStream =
-        Pin<Box<dyn Stream<Item = Result<InteractResponse, Status>> + Send + Sync + 'static>>;
+    type InteractStream = ReceiverStream<Result<InteractResponse, Status>>;
 
     async fn interact(
         &self,
         request: Request<Streaming<InteractRequest>>,
     ) -> Result<Response<Self::InteractStream>, Status> {
-        trace!("interact: {:?}", request.get_ref());
-        Err(Status::unimplemented("interact"))
+        trace!("interact: [START]");
+        let mut reqs = request.into_inner();
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<InteractResponse, Status>>(16);
+        tokio::spawn(async move {
+            while let Some(req) = reqs.message().await.unwrap() {
+                trace!("interact: [RECV] {:?}", req);
+                tx.send(Ok(InteractResponse::default())).await.unwrap();
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 }
 

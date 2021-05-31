@@ -553,7 +553,6 @@ name = "pingquery"
 version = "0.1.0"
 dependencies = [
  "env_logger",
- "futures-core",
  "log",
  "prost",
  "r2d2",
@@ -561,6 +560,7 @@ dependencies = [
  "rusqlite",
  "structopt",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tonic-build",
 ]
