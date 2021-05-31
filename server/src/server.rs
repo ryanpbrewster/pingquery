@@ -1,24 +1,20 @@
-use std::convert::TryInto;
+use std::sync::Arc;
 
 use crate::{
-    config::{Config, MutateConfig, QueryConfig},
+    persistence::Persistence,
     proto::api::{
         ping_query_server::PingQuery, ExecRequest, ExecResponse, GetConfigRequest,
         GetConfigResponse, InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
     },
-    value::Row,
 };
 
 use log::trace;
 
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 
 pub struct PingQueryService {
-    pub metadata: Pool<SqliteConnectionManager>,
-    pub data: Pool<SqliteConnectionManager>,
+    pub persistence: Arc<Persistence>,
 }
 
 #[tonic::async_trait]
@@ -28,41 +24,8 @@ impl PingQuery for PingQueryService {
         request: Request<GetConfigRequest>,
     ) -> Result<Response<GetConfigResponse>, Status> {
         trace!("get_config: {:?}", request.get_ref());
-        let mut conn = self.metadata.get().unwrap();
-        let txn = conn.transaction().unwrap();
-        init_tables(&txn);
-        let queries: Vec<QueryConfig> = {
-            let mut stmt = txn.prepare("SELECT * FROM queries").unwrap();
-            stmt.query_map([], |row| {
-                Ok(QueryConfig {
-                    name: row.get_unwrap("name"),
-                    sql_template: row.get_unwrap("sql_template"),
-                })
-            })
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap()
-        };
-        let mutates: Vec<MutateConfig> = {
-            let mut stmt = txn.prepare("SELECT * FROM mutates").unwrap();
-            stmt.query_map([], |row| {
-                Ok(MutateConfig {
-                    name: row.get_unwrap("name"),
-                    sql_template: row.get_unwrap("sql_template"),
-                })
-            })
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap()
-        };
-        txn.commit().unwrap();
-        let config = Config {
-            queries: queries.into_iter().map(|c| (c.name.clone(), c)).collect(),
-            mutates: mutates.into_iter().map(|c| (c.name.clone(), c)).collect(),
-        };
-        Ok(Response::new(GetConfigResponse {
-            config: Some(config.into()),
-        }))
+        let resp = self.persistence.get_config(request.into_inner()).await?;
+        Ok(Response::new(resp))
     }
 
     async fn set_config(
@@ -70,42 +33,14 @@ impl PingQuery for PingQueryService {
         request: Request<SetConfigRequest>,
     ) -> Result<Response<SetConfigResponse>, Status> {
         trace!("set_config: {:?}", request.get_ref());
-        let config: Config = request
-            .into_inner()
-            .config
-            .ok_or(Status::invalid_argument("missing config"))?
-            .try_into()?;
-
-        let mut conn = self.metadata.get().unwrap();
-        let txn = conn.transaction().unwrap();
-        init_tables(&txn);
-        clear_tables(&txn);
-        write_tables(&txn, config);
-        txn.commit().unwrap();
+        self.persistence.set_config(request.into_inner()).await?;
         Ok(Response::new(SetConfigResponse::default()))
     }
 
     async fn exec(&self, request: Request<ExecRequest>) -> Result<Response<ExecResponse>, Status> {
         trace!("exec: {:?}", request.get_ref());
-        let raw_sql = request.into_inner().raw_sql;
-        let conn = self.data.get().unwrap();
-        let mut stmt = conn.prepare(&raw_sql).unwrap();
-        let rows: Vec<Row> = stmt
-            .query_map([], |row| {
-                let columns = row
-                    .column_names()
-                    .into_iter()
-                    .map(|s| (s.to_owned(), row.get_unwrap(s)))
-                    .collect();
-                trace!("row = {:?}", columns);
-                Ok(Row { columns })
-            })
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        Ok(Response::new(ExecResponse {
-            rows: rows.into_iter().map(|r| r.into()).collect(),
-        }))
+        let resp = self.persistence.exec(request.into_inner()).await?;
+        Ok(Response::new(resp))
     }
 
     type InteractStream = ReceiverStream<Result<InteractResponse, Status>>;
@@ -115,57 +50,12 @@ impl PingQuery for PingQueryService {
         request: Request<Streaming<InteractRequest>>,
     ) -> Result<Response<Self::InteractStream>, Status> {
         trace!("interact: [START]");
-        let mut reqs = request.into_inner();
-        let (tx, rx) = tokio::sync::mpsc::channel::<Result<InteractResponse, Status>>(16);
+        let persistence = self.persistence.clone();
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        let inputs = request.into_inner();
         tokio::spawn(async move {
-            while let Some(req) = reqs.message().await.unwrap() {
-                trace!("interact: [RECV] {:?}", req);
-                tx.send(Ok(InteractResponse::default())).await.unwrap();
-            }
+            persistence.interact(inputs, tx).await;
         });
         Ok(Response::new(ReceiverStream::new(rx)))
-    }
-}
-
-fn init_tables(txn: &rusqlite::Transaction) {
-    txn.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS queries (
-            name TEXT NOT NULL PRIMARY KEY,
-            sql_template TEXT NOT NULL
-        )
-    "#,
-        [],
-    )
-    .unwrap();
-    txn.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS mutates (
-            name TEXT NOT NULL PRIMARY KEY,
-            sql_template TEXT NOT NULL
-        )
-    "#,
-        [],
-    )
-    .unwrap();
-}
-
-fn clear_tables(txn: &rusqlite::Transaction) {
-    txn.execute("DELETE FROM queries", []).unwrap();
-    txn.execute("DELETE FROM mutates", []).unwrap();
-}
-
-fn write_tables(txn: &rusqlite::Transaction, config: Config) {
-    let mut qstmt = txn
-        .prepare("INSERT INTO queries (name, sql_template) VALUES (?, ?)")
-        .unwrap();
-    for query in config.queries.values() {
-        qstmt.execute([&query.name, &query.sql_template]).unwrap();
-    }
-    let mut mstmt = txn
-        .prepare("INSERT INTO mutates (name, sql_template) VALUES (?, ?)")
-        .unwrap();
-    for mutate in config.mutates.values() {
-        mstmt.execute([&mutate.name, &mutate.sql_template]).unwrap();
     }
 }

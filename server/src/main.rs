@@ -1,7 +1,10 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use log::info;
-use pingquery::{proto::api::ping_query_server::PingQueryServer, server::PingQueryService};
+use pingquery::{
+    persistence::Persistence, proto::api::ping_query_server::PingQueryServer,
+    server::PingQueryService,
+};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
@@ -12,9 +15,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let flags = CliFlags::from_args();
 
-    let service = PingQueryService {
+    let persistence = Persistence {
         metadata: sqlite(flags.metadata)?,
         data: sqlite(flags.data)?,
+    };
+    let service = PingQueryService {
+        persistence: Arc::new(persistence),
     };
 
     let addr = "[::1]:50051".parse().unwrap();
