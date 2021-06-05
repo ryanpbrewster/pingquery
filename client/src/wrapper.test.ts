@@ -36,26 +36,22 @@ describe("inspect", () => {
     `);
 
     const stream = client.interact();
+    const out = new DeferQueue<InteractResponse>();
+    stream.onData((data) => out.push(data));
 
-    const d0 = deferred<InteractResponse>();
-    stream.onData((data) => d0.resolve(data));
     await stream.send({ type: "query", id: 1, name: "get_counts" });
-    expect(await d0.promise).toEqual({ id: 1, rows: [] });
+    expect(await out.poll()).toEqual({ id: 1, rows: [] });
 
-    const d1 = deferred<InteractResponse>();
-    stream.onData((data) => d1.resolve(data));
     await stream.send({
       type: "mutate",
       id: 2,
       name: "add_word",
       params: { ":word": "hello" },
     });
-    expect(await d1.promise).toEqual({ id: 2, rows: [] });
+    expect(await out.poll()).toEqual({ id: 2, rows: [] });
 
-    const d2 = deferred<InteractResponse>();
-    stream.onData((data) => d2.resolve(data));
     await stream.send({ type: "query", id: 3, name: "get_counts" });
-    expect(await d2.promise).toEqual({
+    expect(await out.poll()).toEqual({
       id: 3,
       rows: [{ word: "hello", count: 1 }],
     });
@@ -64,17 +60,34 @@ describe("inspect", () => {
   });
 });
 
-interface Deferred<T> {
-  readonly promise: Promise<T>;
-  resolve(value: T): void;
-  reject(err: Error): void;
+class Deferred<T> {
+  resolve: (value: T) => void = () => {};
+  reject: (err: Error) => void = () => {};
+  promise: Promise<T>;
+  constructor() {
+    this.promise = new Promise<T>((res, rej) => {
+      this.resolve = res;
+      this.reject = rej;
+    });
+  }
 }
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {};
-  let reject: (err: Error) => void = () => {};
-  let promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
+
+class DeferQueue<T> {
+  private readonly buf: Deferred<T>[] = [];
+
+  private read: number = 0;
+  private write: number = 0;
+
+  private alloc(idx: number): Deferred<T> {
+    while (idx >= this.buf.length) {
+      this.buf.push(new Deferred());
+    }
+    return this.buf[idx];
+  }
+  push(x: T): void {
+    this.alloc(this.write++).resolve(x);
+  }
+  poll(): Promise<T> {
+    return this.alloc(this.read++).promise;
+  }
 }
