@@ -64,7 +64,7 @@ impl Persistence {
             .prepare(&raw_sql)
             .map_err(|_| Status::invalid_argument("invalid sql"))?;
         let rows: Vec<Row> = stmt
-            .query_map([], |row| Ok(row.into()))
+            .query_map([], |row| Ok(row_from_sql(row)))
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
@@ -169,27 +169,17 @@ fn write_tables(txn: &rusqlite::Transaction, config: &Config) {
 fn read_config(txn: &rusqlite::Transaction) -> (Vec<QueryConfig>, Vec<MutateConfig>) {
     let queries: Vec<QueryConfig> = {
         let mut stmt = txn.prepare("SELECT * FROM queries").unwrap();
-        stmt.query_map([], |row| {
-            Ok(QueryConfig {
-                name: row.get_unwrap("name"),
-                sql_template: row.get_unwrap("sql_template"),
-            })
-        })
-        .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap()
+        stmt.query_map([], |row| Ok(query_from_sql(row)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
     };
     let mutates: Vec<MutateConfig> = {
         let mut stmt = txn.prepare("SELECT * FROM mutates").unwrap();
-        stmt.query_map([], |row| {
-            Ok(MutateConfig {
-                name: row.get_unwrap("name"),
-                sql_template: row.get_unwrap("sql_template"),
-            })
-        })
-        .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap()
+        stmt.query_map([], |row| Ok(mutate_from_sql(row)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
     };
     (queries, mutates)
 }
@@ -219,22 +209,34 @@ fn do_stmt(
         .map(|(name, value)| (name.as_ref(), value as &dyn ToSql))
         .collect();
     let rows: Vec<Row> = stmt
-        .query_map(params.as_slice(), |row| Ok(row.into()))
+        .query_map(params.as_slice(), |row| Ok(row_from_sql(row)))
         .map_err(|_| Status::invalid_argument("failed to query"))?
         .collect::<Result<_, _>>()
         .map_err(|_| Status::invalid_argument("failed to collect rows"))?;
     Ok(rows)
 }
 
-impl<'a> From<&'a rusqlite::Row<'a>> for Row {
-    fn from(row: &rusqlite::Row) -> Self {
-        let columns = row
-            .column_names()
-            .into_iter()
-            .map(|s| (s.to_owned(), row.get_unwrap(s)))
-            .collect();
-        Row { columns }
+fn query_from_sql(row: &rusqlite::Row) -> QueryConfig {
+    QueryConfig {
+        name: row.get_unwrap("name"),
+        sql_template: row.get_unwrap("sql_template"),
+        listen: vec![],
     }
+}
+fn mutate_from_sql(row: &rusqlite::Row) -> MutateConfig {
+    MutateConfig {
+        name: row.get_unwrap("name"),
+        sql_template: row.get_unwrap("sql_template"),
+        notify: vec![],
+    }
+}
+fn row_from_sql(row: &rusqlite::Row) -> Row {
+    let columns = row
+        .column_names()
+        .into_iter()
+        .map(|s| (s.to_owned(), row.get_unwrap(s)))
+        .collect();
+    Row { columns }
 }
 impl ToSql for Value {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {

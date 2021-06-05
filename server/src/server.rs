@@ -43,7 +43,7 @@ impl PingQuery for PingQueryService {
         let config: Config = request
             .into_inner()
             .config
-            .ok_or(Status::invalid_argument("missing config"))?
+            .ok_or_else(|| Status::invalid_argument("missing config"))?
             .try_into()?;
         self.persistence.set_config(config).await?;
         Ok(Response::new(SetConfigResponse::default()))

@@ -16,12 +16,19 @@ pub struct Config {
 pub struct QueryConfig {
     pub name: String,
     pub sql_template: String,
+    pub listen: Vec<Path>,
 }
 
 #[derive(Debug)]
 pub struct MutateConfig {
     pub name: String,
     pub sql_template: String,
+    pub notify: Vec<Path>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Path {
+    pub segments: Vec<String>,
 }
 
 impl From<Config> for api::Config {
@@ -53,18 +60,19 @@ impl TryFrom<api::Config> for Config {
     }
 }
 
-impl From<QueryConfig> for api::StatementConfig {
+impl From<QueryConfig> for api::QueryConfig {
     fn from(value: QueryConfig) -> Self {
         Self {
             name: value.name,
             sql_template: value.sql_template,
+            listen: value.listen.into_iter().map(|p| p.into()).collect(),
         }
     }
 }
-impl TryFrom<api::StatementConfig> for QueryConfig {
+impl TryFrom<api::QueryConfig> for QueryConfig {
     type Error = Status;
 
-    fn try_from(value: api::StatementConfig) -> Result<Self, Self::Error> {
+    fn try_from(value: api::QueryConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             name: if value.name.is_empty() {
                 return Err(Status::invalid_argument("missing name"));
@@ -76,22 +84,44 @@ impl TryFrom<api::StatementConfig> for QueryConfig {
             } else {
                 value.sql_template
             },
+            listen: value
+                .listen
+                .into_iter()
+                .map(|p| p.try_into())
+                .collect::<Result<_, _>>()?,
         })
     }
 }
 
-impl From<MutateConfig> for api::StatementConfig {
+impl TryFrom<api::Path> for Path {
+    type Error = Status;
+
+    fn try_from(value: api::Path) -> Result<Self, Self::Error> {
+        let segments: Vec<String> = value.segments;
+        Ok(Path { segments })
+    }
+}
+impl From<Path> for api::Path {
+    fn from(value: Path) -> Self {
+        Self {
+            segments: value.segments,
+        }
+    }
+}
+
+impl From<MutateConfig> for api::MutateConfig {
     fn from(value: MutateConfig) -> Self {
         Self {
             name: value.name,
             sql_template: value.sql_template,
+            notify: value.notify.into_iter().map(|p| p.into()).collect(),
         }
     }
 }
-impl TryFrom<api::StatementConfig> for MutateConfig {
+impl TryFrom<api::MutateConfig> for MutateConfig {
     type Error = Status;
 
-    fn try_from(value: api::StatementConfig) -> Result<Self, Self::Error> {
+    fn try_from(value: api::MutateConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             name: if value.name.is_empty() {
                 return Err(Status::invalid_argument("missing name"));
@@ -103,6 +133,11 @@ impl TryFrom<api::StatementConfig> for MutateConfig {
             } else {
                 value.sql_template
             },
+            notify: value
+                .notify
+                .into_iter()
+                .map(|p| p.try_into())
+                .collect::<Result<_, _>>()?,
         })
     }
 }
