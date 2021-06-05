@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use log::info;
 use pingquery::{
-    persistence::Persistence, proto::api::ping_query_server::PingQueryServer,
+    actor::ListenActor, persistence::Persistence, proto::api::ping_query_server::PingQueryServer,
     server::PingQueryService,
 };
 use r2d2_sqlite::SqliteConnectionManager;
@@ -21,6 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let service = PingQueryService {
         persistence: Arc::new(persistence),
+        listener: ListenActor::start(),
     };
 
     let addr = "[::1]:50051".parse().unwrap();

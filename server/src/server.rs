@@ -1,7 +1,7 @@
 use std::{convert::TryInto, sync::Arc};
 
 use crate::{
-    actor::{ClientActor, ClientMsg},
+    actor::{ClientActor, ClientMsg, ListenHandle},
     config::Config,
     persistence::Persistence,
     proto::api::{
@@ -16,6 +16,7 @@ use tonic::{Request, Response, Status, Streaming};
 
 pub struct PingQueryService {
     pub persistence: Arc<Persistence>,
+    pub listener: ListenHandle,
 }
 
 #[tonic::async_trait]
@@ -62,9 +63,10 @@ impl PingQuery for PingQueryService {
         request: Request<Streaming<InteractRequest>>,
     ) -> Result<Response<Self::InteractStream>, Status> {
         let persistence = self.persistence.clone();
+        let listener = self.listener.clone();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
-        let handle = ClientActor::start(tx, persistence);
+        let handle = ClientActor::start(tx, persistence, listener);
         let mut inputs = request.into_inner();
         tokio::spawn(async move {
             while let Ok(Some(msg)) = inputs.message().await {
@@ -74,6 +76,7 @@ impl PingQuery for PingQueryService {
                     .map_err(|_| Status::internal("failed to pipe InteractRequest to actor"))
                     .unwrap();
             }
+            handle.sender.send(ClientMsg::End).unwrap();
         });
         Ok(Response::new(UnboundedReceiverStream::new(rx)))
     }

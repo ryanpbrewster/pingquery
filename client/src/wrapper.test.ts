@@ -84,10 +84,10 @@ describe("inspect", () => {
       params: { ":word": "hello" },
     });
     expect(await out.poll()).toEqual({ id: 2, rows: [] });
-    // expect(await out.poll()).toEqual({
-    //   id: 1,
-    //   rows: [{ word: "hello", count: 1 }],
-    // });
+    expect(await out.poll()).toEqual({
+      id: 1,
+      rows: [{ word: "hello", count: 1 }],
+    });
 
     stream.end();
   });

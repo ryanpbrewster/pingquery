@@ -8,12 +8,13 @@ use tonic::Status;
 
 use crate::proto::api;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Integer(i64),
     Text(String),
 }
 
+#[derive(Debug, Clone)]
 pub struct Row {
     pub columns: BTreeMap<String, Value>,
 }

@@ -4,7 +4,7 @@ pub mod proto {
 }
 
 pub mod actor;
-mod config;
+pub mod config;
 pub mod persistence;
 pub mod requests;
 pub mod server;

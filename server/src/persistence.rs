@@ -1,9 +1,6 @@
-use std::{collections::BTreeMap, convert::TryInto};
-
 use crate::{
     config::{Config, MutateConfig, QueryConfig},
-    proto::api::{self, ExecRequest, ExecResponse, InteractRequest, InteractResponse},
-    requests::Interaction,
+    proto::api::{ExecRequest, ExecResponse},
     value::{Row, Value},
 };
 
@@ -14,11 +11,8 @@ use rusqlite::{
     types::{ToSqlOutput, ValueRef},
     ToSql,
 };
-use tokio::sync::{
-    mpsc::{self, Sender},
-    watch,
-};
-use tonic::{Status, Streaming};
+
+use tonic::Status;
 
 pub struct Persistence {
     pub metadata: Pool<SqliteConnectionManager>,
@@ -76,27 +70,7 @@ impl Persistence {
         })
     }
 
-    pub async fn do_interact(
-        &self,
-        req: api::InteractRequest,
-    ) -> Result<api::InteractResponse, Status> {
-        let id = req.id;
-        let req: Result<Interaction, Status> = req.try_into();
-        let rows = match req {
-            Err(err) => {
-                return Err(err);
-            }
-            Ok(Interaction::Query { name, params }) => self.do_query(&name, &params).await?,
-            Ok(Interaction::Mutate { name, params }) => self.do_query(&name, &params).await?,
-            Ok(Interaction::Listen { name, params }) => self.do_query(&name, &params).await?,
-        };
-        return Ok(api::InteractResponse {
-            id,
-            rows: rows.into_iter().map(|row| row.into()).collect(),
-        });
-    }
-
-    async fn do_query(&self, name: &str, params: &Row) -> Result<Vec<Row>, Status> {
+    pub fn do_query(&self, name: &str, params: &Row) -> Result<Vec<Row>, Status> {
         let sql_template = {
             let mut conn = self.metadata.get().unwrap();
             let txn = conn.transaction().unwrap();
