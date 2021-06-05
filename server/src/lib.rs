@@ -3,6 +3,7 @@ pub mod proto {
     pub mod api;
 }
 
+pub mod actor;
 mod config;
 pub mod persistence;
 pub mod requests;

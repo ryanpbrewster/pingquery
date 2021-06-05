@@ -1,6 +1,7 @@
 use std::{convert::TryInto, sync::Arc};
 
 use crate::{
+    actor::{ClientActor, ClientMsg},
     config::Config,
     persistence::Persistence,
     proto::api::{
@@ -10,7 +11,7 @@ use crate::{
     },
 };
 
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 
 pub struct PingQueryService {
@@ -54,18 +55,26 @@ impl PingQuery for PingQueryService {
         Ok(Response::new(resp))
     }
 
-    type InteractStream = ReceiverStream<Result<InteractResponse, Status>>;
+    type InteractStream = UnboundedReceiverStream<Result<InteractResponse, Status>>;
 
     async fn interact(
         &self,
         request: Request<Streaming<InteractRequest>>,
     ) -> Result<Response<Self::InteractStream>, Status> {
         let persistence = self.persistence.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(16);
-        let inputs = request.into_inner();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+
+        let handle = ClientActor::start(tx, persistence);
+        let mut inputs = request.into_inner();
         tokio::spawn(async move {
-            persistence.interact(inputs, tx).await;
+            while let Ok(Some(msg)) = inputs.message().await {
+                handle
+                    .sender
+                    .send(ClientMsg::User(msg))
+                    .map_err(|_| Status::internal("failed to pipe InteractRequest to actor"))
+                    .unwrap();
+            }
         });
-        Ok(Response::new(ReceiverStream::new(rx)))
+        Ok(Response::new(UnboundedReceiverStream::new(rx)))
     }
 }

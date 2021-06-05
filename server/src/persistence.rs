@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::{collections::BTreeMap, convert::TryInto};
 
 use crate::{
     config::{Config, MutateConfig, QueryConfig},
@@ -14,7 +14,10 @@ use rusqlite::{
     types::{ToSqlOutput, ValueRef},
     ToSql,
 };
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{
+    mpsc::{self, Sender},
+    watch,
+};
 use tonic::{Status, Streaming};
 
 pub struct Persistence {
@@ -73,20 +76,7 @@ impl Persistence {
         })
     }
 
-    pub async fn interact(
-        &self,
-        mut inputs: Streaming<InteractRequest>,
-        outputs: Sender<Result<InteractResponse, Status>>,
-    ) {
-        trace!("interact: [START]");
-        while let Ok(Some(req)) = inputs.message().await {
-            trace!("interact: [RECV] {:?}", req);
-            outputs.send(self.do_interact(req).await).await.unwrap();
-        }
-        trace!("interact: [DONE]");
-    }
-
-    async fn do_interact(
+    pub async fn do_interact(
         &self,
         req: api::InteractRequest,
     ) -> Result<api::InteractResponse, Status> {
