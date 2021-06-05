@@ -5,6 +5,7 @@ pub mod proto {
 
 mod config;
 pub mod persistence;
+pub mod requests;
 pub mod server;
 pub mod value;
 

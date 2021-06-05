@@ -1,4 +1,8 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InitializeRequest {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InitializeResponse {}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetConfigRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetConfigResponse {
@@ -69,8 +73,8 @@ pub struct StatementConfig {
 pub struct Statement {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(map = "string, message", tag = "2")]
-    pub params: ::std::collections::HashMap<::prost::alloc::string::String, Value>,
+    #[prost(message, optional, tag = "2")]
+    pub params: ::core::option::Option<Row>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Value {
@@ -124,6 +128,20 @@ pub mod ping_query_client {
         pub fn with_interceptor(inner: T, interceptor: impl Into<tonic::Interceptor>) -> Self {
             let inner = tonic::client::Grpc::with_interceptor(inner, interceptor);
             Self { inner }
+        }
+        pub async fn initialize(
+            &mut self,
+            request: impl tonic::IntoRequest<super::InitializeRequest>,
+        ) -> Result<tonic::Response<super::InitializeResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/pingquery.api.PingQuery/Initialize");
+            self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn get_config(
             &mut self,
@@ -205,6 +223,10 @@ pub mod ping_query_server {
     #[doc = "Generated trait containing gRPC methods that should be implemented for use with PingQueryServer."]
     #[async_trait]
     pub trait PingQuery: Send + Sync + 'static {
+        async fn initialize(
+            &self,
+            request: tonic::Request<super::InitializeRequest>,
+        ) -> Result<tonic::Response<super::InitializeResponse>, tonic::Status>;
         async fn get_config(
             &self,
             request: tonic::Request<super::GetConfigRequest>,
@@ -259,6 +281,37 @@ pub mod ping_query_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
+                "/pingquery.api.PingQuery/Initialize" => {
+                    #[allow(non_camel_case_types)]
+                    struct InitializeSvc<T: PingQuery>(pub Arc<T>);
+                    impl<T: PingQuery> tonic::server::UnaryService<super::InitializeRequest> for InitializeSvc<T> {
+                        type Response = super::InitializeResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::InitializeRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).initialize(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1.clone();
+                        let inner = inner.0;
+                        let method = InitializeSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/pingquery.api.PingQuery/GetConfig" => {
                     #[allow(non_camel_case_types)]
                     struct GetConfigSvc<T: PingQuery>(pub Arc<T>);

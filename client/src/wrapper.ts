@@ -1,5 +1,9 @@
 import { PingQueryClient } from "./proto/api_grpc_pb";
-import { ClientDuplexStream, credentials } from "@grpc/grpc-js";
+import {
+  ClientDuplexStream,
+  ClientWritableStream,
+  credentials,
+} from "@grpc/grpc-js";
 import * as api from "./proto/api_pb";
 
 export default class Client {
@@ -8,6 +12,13 @@ export default class Client {
     this.inner = new PingQueryClient(address, credentials.createInsecure());
   }
 
+  async init(): Promise<void> {
+    return new Promise((resolve, reject) =>
+      this.inner.initialize(new api.InitializeRequest(), (err, resp) =>
+        resp ? resolve() : reject(err)
+      )
+    );
+  }
   async getConfig(): Promise<Config> {
     return new Promise((resolve, reject) =>
       this.inner.getConfig(new api.GetConfigRequest(), (err, resp) =>
@@ -38,8 +49,36 @@ export default class Client {
     );
   }
 
-  interact(): ClientDuplexStream<api.InteractRequest, api.InteractResponse> {
-    return this.inner.interact();
+  interact(): InteractWrapper {
+    return new InteractWrapper(this.inner.interact());
+  }
+}
+
+class InteractWrapper {
+  constructor(
+    private readonly inner: ClientDuplexStream<
+      api.InteractRequest,
+      api.InteractResponse
+    >
+  ) {}
+
+  send(req: InteractRequest): Promise<void> {
+    const proto = interactRequestToProto(req);
+    return new Promise((resolve) => {
+      this.inner.write(proto, () => resolve());
+    });
+  }
+  end() {
+    this.inner.end();
+  }
+  onData(cb: (resp: InteractResponse) => void): void {
+    this.inner.on("data", (chunk) => cb(interactResponseFromProto(chunk)));
+  }
+  onEnd(cb: () => void): void {
+    this.inner.on("end", () => cb());
+  }
+  onError(cb: (resp: Error) => void): void {
+    this.inner.on("error", (err) => cb(err));
   }
 }
 
@@ -56,10 +95,73 @@ export interface MutateConfig {
   readonly sql_template: string;
 }
 
+export type InteractRequest = Query | Mutate;
+export interface Query {
+  readonly type: "query";
+  readonly id: number;
+  readonly name: string;
+  readonly params?: Row;
+}
+export interface Mutate {
+  readonly type: "mutate";
+  readonly id: number;
+  readonly name: string;
+  readonly params?: Row;
+}
+
+export interface InteractResponse {
+  readonly id: number;
+  readonly rows: Row[];
+}
+
 export type ObjectMap<T> = { [key: string]: T };
 export type Value = string | number;
 export type Row = ObjectMap<Value>;
 
+function interactRequestToProto(req: InteractRequest): api.InteractRequest {
+  const proto = new api.InteractRequest();
+  proto.setId(req.id);
+  switch (req.type) {
+    case "query":
+      proto.setQuery(queryToProto(req));
+      return proto;
+    case "mutate":
+      proto.setMutate(mutateToProto(req));
+      return proto;
+  }
+}
+function queryToProto(query: Query): api.Statement {
+  const proto = new api.Statement();
+  proto.setName(query.name);
+  if (query.params) {
+    const params = new api.Row();
+    for (const [k, v] of Object.entries(query.params)) {
+      params.getColumnsMap().set(k, valueToProto(v));
+    }
+    proto.setParams(params);
+  }
+  return proto;
+}
+function mutateToProto(mutate: Mutate): api.Statement {
+  const proto = new api.Statement();
+  proto.setName(mutate.name);
+  if (mutate.params) {
+    const params = new api.Row();
+    for (const [k, v] of Object.entries(mutate.params)) {
+      params.getColumnsMap().set(k, valueToProto(v));
+    }
+    proto.setParams(params);
+  }
+  return proto;
+}
+function interactResponseFromProto(
+  proto: api.InteractResponse
+): InteractResponse {
+  return {
+    id: proto.getId(),
+    rows: proto.getRowsList().map(rowFromProto),
+  };
+}
 function valueToProto(v: Value): api.Value {
   const p = new api.Value();
   switch (typeof v) {

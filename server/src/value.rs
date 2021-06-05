@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::{
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+};
 
 use rusqlite::types::{FromSql, FromSqlError};
 use tonic::Status;
@@ -61,6 +64,14 @@ impl From<Value> for rusqlite::types::Value {
         }
     }
 }
+impl<'a> From<&'a Value> for rusqlite::types::ValueRef<'a> {
+    fn from(v: &'a Value) -> Self {
+        match v {
+            Value::Integer(n) => rusqlite::types::ValueRef::Integer(*n),
+            Value::Text(s) => rusqlite::types::ValueRef::Text(s.as_bytes()),
+        }
+    }
+}
 impl FromSql for Value {
     fn column_result(v: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         match v {
@@ -84,5 +95,21 @@ impl From<Row> for api::Row {
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
         }
+    }
+}
+
+impl TryFrom<api::Row> for Row {
+    type Error = Status;
+
+    fn try_from(v: api::Row) -> Result<Self, Self::Error> {
+        let columns: BTreeMap<String, Value> = v
+            .columns
+            .into_iter()
+            .map(|(k, v)| {
+                let v: Value = v.try_into()?;
+                Ok((k, v))
+            })
+            .collect::<Result<BTreeMap<String, Value>, Status>>()?;
+        Ok(Row { columns })
     }
 }

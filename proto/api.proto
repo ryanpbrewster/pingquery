@@ -3,12 +3,17 @@ syntax = "proto3";
 package pingquery.api;
 
 service PingQuery {
+  rpc Initialize (InitializeRequest) returns (InitializeResponse) {}
+
   rpc GetConfig (GetConfigRequest) returns (GetConfigResponse) {}
   rpc SetConfig (SetConfigRequest) returns (SetConfigResponse) {}
 
   rpc Exec (ExecRequest) returns (ExecResponse) {}
   rpc Interact (stream InteractRequest) returns (stream InteractResponse) {}
 }
+
+message InitializeRequest {}
+message InitializeResponse {}
 
 message GetConfigRequest {}
 
@@ -60,7 +65,7 @@ message StatementConfig {
 
 message Statement {
   string name = 1;
-  map<string, Value> params = 2;
+  Row params = 2;
 }
 
 message Value {

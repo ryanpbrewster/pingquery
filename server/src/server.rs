@@ -5,7 +5,8 @@ use crate::{
     persistence::Persistence,
     proto::api::{
         ping_query_server::PingQuery, ExecRequest, ExecResponse, GetConfigRequest,
-        GetConfigResponse, InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
+        GetConfigResponse, InitializeRequest, InitializeResponse, InteractRequest,
+        InteractResponse, SetConfigRequest, SetConfigResponse,
     },
 };
 
@@ -18,6 +19,13 @@ pub struct PingQueryService {
 
 #[tonic::async_trait]
 impl PingQuery for PingQueryService {
+    async fn initialize(
+        &self,
+        _request: Request<InitializeRequest>,
+    ) -> Result<Response<InitializeResponse>, Status> {
+        self.persistence.init().await?;
+        Ok(Response::new(InitializeResponse::default()))
+    }
     async fn get_config(
         &self,
         _request: Request<GetConfigRequest>,

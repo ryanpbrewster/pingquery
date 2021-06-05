@@ -1,12 +1,19 @@
+use std::convert::TryInto;
+
 use crate::{
     config::{Config, MutateConfig, QueryConfig},
-    proto::api::{ExecRequest, ExecResponse, InteractRequest, InteractResponse},
-    value::Row,
+    proto::api::{self, ExecRequest, ExecResponse, InteractRequest, InteractResponse},
+    requests::Interaction,
+    value::{Row, Value},
 };
 
 use log::trace;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{
+    types::{ToSqlOutput, ValueRef},
+    ToSql,
+};
 use tokio::sync::mpsc::Sender;
 use tonic::{Status, Streaming};
 
@@ -16,35 +23,19 @@ pub struct Persistence {
 }
 
 impl Persistence {
+    pub async fn init(&self) -> Result<(), Status> {
+        trace!("init");
+        let mut conn = self.metadata.get().unwrap();
+        let txn = conn.transaction().unwrap();
+        init_tables(&txn);
+        txn.commit().unwrap();
+        Ok(())
+    }
     pub async fn get_config(&self) -> Result<Config, Status> {
         trace!("get_config");
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
-        init_tables(&txn);
-        let queries: Vec<QueryConfig> = {
-            let mut stmt = txn.prepare("SELECT * FROM queries").unwrap();
-            stmt.query_map([], |row| {
-                Ok(QueryConfig {
-                    name: row.get_unwrap("name"),
-                    sql_template: row.get_unwrap("sql_template"),
-                })
-            })
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap()
-        };
-        let mutates: Vec<MutateConfig> = {
-            let mut stmt = txn.prepare("SELECT * FROM mutates").unwrap();
-            stmt.query_map([], |row| {
-                Ok(MutateConfig {
-                    name: row.get_unwrap("name"),
-                    sql_template: row.get_unwrap("sql_template"),
-                })
-            })
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap()
-        };
+        let (queries, mutates) = read_config(&txn);
         txn.commit().unwrap();
         let config = Config {
             queries: queries.into_iter().map(|c| (c.name.clone(), c)).collect(),
@@ -58,10 +49,10 @@ impl Persistence {
 
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
-        init_tables(&txn);
         clear_tables(&txn);
-        write_tables(&txn, config);
+        write_tables(&txn, &config);
         txn.commit().unwrap();
+        trace!("committed config {:?}", config);
         Ok(())
     }
 
@@ -69,17 +60,11 @@ impl Persistence {
         trace!("exec: {:?}", request);
         let raw_sql = request.raw_sql;
         let conn = self.data.get().unwrap();
-        let mut stmt = conn.prepare(&raw_sql).unwrap();
+        let mut stmt = conn
+            .prepare(&raw_sql)
+            .map_err(|_| Status::invalid_argument("invalid sql"))?;
         let rows: Vec<Row> = stmt
-            .query_map([], |row| {
-                let columns = row
-                    .column_names()
-                    .into_iter()
-                    .map(|s| (s.to_owned(), row.get_unwrap(s)))
-                    .collect();
-                trace!("row = {:?}", columns);
-                Ok(Row { columns })
-            })
+            .query_map([], |row| Ok(row.into()))
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
@@ -94,11 +79,47 @@ impl Persistence {
         outputs: Sender<Result<InteractResponse, Status>>,
     ) {
         trace!("interact: [START]");
-        while let Some(req) = inputs.message().await.unwrap() {
+        while let Ok(Some(req)) = inputs.message().await {
             trace!("interact: [RECV] {:?}", req);
-            outputs.send(Ok(InteractResponse::default())).await.unwrap();
+            outputs.send(self.do_interact(req).await).await.unwrap();
         }
         trace!("interact: [DONE]");
+    }
+
+    async fn do_interact(
+        &self,
+        req: api::InteractRequest,
+    ) -> Result<api::InteractResponse, Status> {
+        let id = req.id;
+        let req: Result<Interaction, Status> = req.try_into();
+        let rows = match req {
+            Err(err) => {
+                return Err(err);
+            }
+            Ok(Interaction::Query { name, params }) => self.do_query(&name, &params).await?,
+            Ok(Interaction::Mutate { name, params }) => self.do_query(&name, &params).await?,
+        };
+        return Ok(api::InteractResponse {
+            id,
+            rows: rows.into_iter().map(|row| row.into()).collect(),
+        });
+    }
+
+    async fn do_query(&self, name: &str, params: &Row) -> Result<Vec<Row>, Status> {
+        let sql_template = {
+            let mut conn = self.metadata.get().unwrap();
+            let txn = conn.transaction().unwrap();
+            find_template(&txn, name)
+                .ok_or_else(|| Status::invalid_argument(&format!("no such statement: {}", name)))?
+        };
+        let rows = {
+            let mut conn = self.data.get().unwrap();
+            let txn = conn.transaction().unwrap();
+            let rows = do_stmt(&txn, &sql_template, params)?;
+            txn.commit().unwrap();
+            rows
+        };
+        Ok(rows)
     }
 }
 
@@ -130,7 +151,7 @@ fn clear_tables(txn: &rusqlite::Transaction) {
     txn.execute("DELETE FROM mutates", []).unwrap();
 }
 
-fn write_tables(txn: &rusqlite::Transaction, config: Config) {
+fn write_tables(txn: &rusqlite::Transaction, config: &Config) {
     let mut qstmt = txn
         .prepare("INSERT INTO queries (name, sql_template) VALUES (?, ?)")
         .unwrap();
@@ -142,5 +163,82 @@ fn write_tables(txn: &rusqlite::Transaction, config: Config) {
         .unwrap();
     for mutate in config.mutates.values() {
         mstmt.execute([&mutate.name, &mutate.sql_template]).unwrap();
+    }
+}
+
+fn read_config(txn: &rusqlite::Transaction) -> (Vec<QueryConfig>, Vec<MutateConfig>) {
+    let queries: Vec<QueryConfig> = {
+        let mut stmt = txn.prepare("SELECT * FROM queries").unwrap();
+        stmt.query_map([], |row| {
+            Ok(QueryConfig {
+                name: row.get_unwrap("name"),
+                sql_template: row.get_unwrap("sql_template"),
+            })
+        })
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+    };
+    let mutates: Vec<MutateConfig> = {
+        let mut stmt = txn.prepare("SELECT * FROM mutates").unwrap();
+        stmt.query_map([], |row| {
+            Ok(MutateConfig {
+                name: row.get_unwrap("name"),
+                sql_template: row.get_unwrap("sql_template"),
+            })
+        })
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+    };
+    (queries, mutates)
+}
+
+fn find_template(txn: &rusqlite::Transaction, name: &str) -> Option<String> {
+    let (queries, mutates) = read_config(txn);
+    if let Some(q) = queries.into_iter().find(|q| q.name == name) {
+        return Some(q.sql_template);
+    };
+    if let Some(m) = mutates.into_iter().find(|q| q.name == name) {
+        return Some(m.sql_template);
+    };
+    None
+}
+
+fn do_stmt(
+    txn: &rusqlite::Transaction,
+    sql_template: &str,
+    params: &Row,
+) -> Result<Vec<Row>, Status> {
+    let mut stmt = txn
+        .prepare(sql_template)
+        .map_err(|e| Status::invalid_argument(&format!("invalid sql: {}", e)))?;
+    let params: Vec<(&str, &dyn ToSql)> = params
+        .columns
+        .iter()
+        .map(|(name, value)| (name.as_ref(), value as &dyn ToSql))
+        .collect();
+    let rows: Vec<Row> = stmt
+        .query_map(params.as_slice(), |row| Ok(row.into()))
+        .map_err(|_| Status::invalid_argument("failed to query"))?
+        .collect::<Result<_, _>>()
+        .map_err(|_| Status::invalid_argument("failed to collect rows"))?;
+    Ok(rows)
+}
+
+impl<'a> From<&'a rusqlite::Row<'a>> for Row {
+    fn from(row: &rusqlite::Row) -> Self {
+        let columns = row
+            .column_names()
+            .into_iter()
+            .map(|s| (s.to_owned(), row.get_unwrap(s)))
+            .collect();
+        Row { columns }
+    }
+}
+impl ToSql for Value {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        let vref: ValueRef = self.into();
+        Ok(ToSqlOutput::Borrowed(vref))
     }
 }

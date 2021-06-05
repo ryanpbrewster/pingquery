@@ -48,6 +48,28 @@ function deserialize_pingquery_api_GetConfigResponse(buffer_arg) {
   return api_pb.GetConfigResponse.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
+function serialize_pingquery_api_InitializeRequest(arg) {
+  if (!(arg instanceof api_pb.InitializeRequest)) {
+    throw new Error('Expected argument of type pingquery.api.InitializeRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_pingquery_api_InitializeRequest(buffer_arg) {
+  return api_pb.InitializeRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_pingquery_api_InitializeResponse(arg) {
+  if (!(arg instanceof api_pb.InitializeResponse)) {
+    throw new Error('Expected argument of type pingquery.api.InitializeResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_pingquery_api_InitializeResponse(buffer_arg) {
+  return api_pb.InitializeResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
 function serialize_pingquery_api_InteractRequest(arg) {
   if (!(arg instanceof api_pb.InteractRequest)) {
     throw new Error('Expected argument of type pingquery.api.InteractRequest');
@@ -94,6 +116,17 @@ function deserialize_pingquery_api_SetConfigResponse(buffer_arg) {
 
 
 var PingQueryService = exports.PingQueryService = {
+  initialize: {
+    path: '/pingquery.api.PingQuery/Initialize',
+    requestStream: false,
+    responseStream: false,
+    requestType: api_pb.InitializeRequest,
+    responseType: api_pb.InitializeResponse,
+    requestSerialize: serialize_pingquery_api_InitializeRequest,
+    requestDeserialize: deserialize_pingquery_api_InitializeRequest,
+    responseSerialize: serialize_pingquery_api_InitializeResponse,
+    responseDeserialize: deserialize_pingquery_api_InitializeResponse,
+  },
   getConfig: {
     path: '/pingquery.api.PingQuery/GetConfig',
     requestStream: false,
