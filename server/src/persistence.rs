@@ -98,6 +98,7 @@ impl Persistence {
             }
             Ok(Interaction::Query { name, params }) => self.do_query(&name, &params).await?,
             Ok(Interaction::Mutate { name, params }) => self.do_query(&name, &params).await?,
+            Ok(Interaction::Listen { name, params }) => self.do_query(&name, &params).await?,
         };
         return Ok(api::InteractResponse {
             id,

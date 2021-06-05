@@ -95,7 +95,7 @@ export interface MutateConfig {
   readonly sql_template: string;
 }
 
-export type InteractRequest = Query | Mutate;
+export type InteractRequest = Query | Mutate | Listen;
 export interface Query {
   readonly type: "query";
   readonly id: number;
@@ -104,6 +104,12 @@ export interface Query {
 }
 export interface Mutate {
   readonly type: "mutate";
+  readonly id: number;
+  readonly name: string;
+  readonly params?: Row;
+}
+export interface Listen {
+  readonly type: "listen";
   readonly id: number;
   readonly name: string;
   readonly params?: Row;
@@ -128,17 +134,16 @@ function interactRequestToProto(req: InteractRequest): api.InteractRequest {
     case "mutate":
       proto.setMutate(mutateToProto(req));
       return proto;
+    case "listen":
+      proto.setListen(listenToProto(req));
+      return proto;
   }
 }
 function queryToProto(query: Query): api.Statement {
   const proto = new api.Statement();
   proto.setName(query.name);
   if (query.params) {
-    const params = new api.Row();
-    for (const [k, v] of Object.entries(query.params)) {
-      params.getColumnsMap().set(k, valueToProto(v));
-    }
-    proto.setParams(params);
+    proto.setParams(rowToProto(query.params));
   }
   return proto;
 }
@@ -146,11 +151,15 @@ function mutateToProto(mutate: Mutate): api.Statement {
   const proto = new api.Statement();
   proto.setName(mutate.name);
   if (mutate.params) {
-    const params = new api.Row();
-    for (const [k, v] of Object.entries(mutate.params)) {
-      params.getColumnsMap().set(k, valueToProto(v));
-    }
-    proto.setParams(params);
+    proto.setParams(rowToProto(mutate.params));
+  }
+  return proto;
+}
+function listenToProto(listen: Listen): api.Statement {
+  const proto = new api.Statement();
+  proto.setName(listen.name);
+  if (listen.params) {
+    proto.setParams(rowToProto(listen.params));
   }
   return proto;
 }
@@ -194,6 +203,13 @@ function rowFromProto(p: api.Row): Row {
     }
   });
   return out;
+}
+function rowToProto(params: Row): api.Row {
+  const proto = new api.Row();
+  for (const [k, v] of Object.entries(params)) {
+    proto.getColumnsMap().set(k, valueToProto(v));
+  }
+  return proto;
 }
 
 function configToProto(config: Config): api.Config {

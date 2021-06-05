@@ -10,6 +10,7 @@ use crate::{
 pub enum Interaction {
     Query { name: String, params: Row },
     Mutate { name: String, params: Row },
+    Listen { name: String, params: Row },
 }
 
 impl TryFrom<api::InteractRequest> for Interaction {
@@ -26,9 +27,10 @@ impl TryFrom<api::InteractRequest> for Interaction {
                 name: stmt.name,
                 params: stmt.params.unwrap_or_default().try_into()?,
             }),
-            Some(interact_request::Type::Listen(_stmt)) => {
-                Err(Status::unimplemented("listen interactions"))
-            }
+            Some(interact_request::Type::Listen(stmt)) => Ok(Interaction::Listen {
+                name: stmt.name,
+                params: stmt.params.unwrap_or_default().try_into()?,
+            }),
         }
     }
 }

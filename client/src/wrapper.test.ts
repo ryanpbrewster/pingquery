@@ -58,6 +58,39 @@ describe("inspect", () => {
 
     stream.end();
   });
+
+  it("word count update", async () => {
+    await client.init();
+    await client.setConfig(CONFIG);
+    await client.exec(`DROP TABLE IF EXISTS word_counts`);
+    await client.exec(`
+      CREATE TABLE IF NOT EXISTS word_counts (
+        word TEXT PRIMARY KEY,
+        count INTEGER NOT NULL
+      )
+    `);
+
+    const stream = client.interact();
+    const out = new DeferQueue<InteractResponse>();
+    stream.onData((data) => out.push(data));
+
+    await stream.send({ type: "listen", id: 1, name: "get_counts" });
+    expect(await out.poll()).toEqual({ id: 1, rows: [] });
+
+    await stream.send({
+      type: "mutate",
+      id: 2,
+      name: "add_word",
+      params: { ":word": "hello" },
+    });
+    expect(await out.poll()).toEqual({ id: 2, rows: [] });
+    expect(await out.poll()).toEqual({
+      id: 1,
+      rows: [{ word: "hello", count: 1 }],
+    });
+
+    stream.end();
+  });
 });
 
 class Deferred<T> {
