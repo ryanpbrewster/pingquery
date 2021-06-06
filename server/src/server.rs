@@ -32,7 +32,7 @@ impl PingQuery for PingQueryService {
         &self,
         _request: Request<GetConfigRequest>,
     ) -> Result<Response<GetConfigResponse>, Status> {
-        let config = self.persistence.get_config().await?;
+        let config = self.persistence.get_config()?;
         Ok(Response::new(GetConfigResponse {
             config: Some(config.into()),
         }))
@@ -47,12 +47,12 @@ impl PingQuery for PingQueryService {
             .config
             .ok_or_else(|| Status::invalid_argument("missing config"))?
             .try_into()?;
-        self.persistence.set_config(config).await?;
+        self.persistence.set_config(config)?;
         Ok(Response::new(SetConfigResponse::default()))
     }
 
     async fn exec(&self, request: Request<ExecRequest>) -> Result<Response<ExecResponse>, Status> {
-        let resp = self.persistence.exec(request.into_inner()).await?;
+        let resp = self.persistence.exec(request.into_inner())?;
         Ok(Response::new(resp))
     }
 

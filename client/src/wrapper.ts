@@ -89,10 +89,12 @@ export interface Config {
 export interface QueryConfig {
   readonly name: string;
   readonly sql_template: string;
+  readonly listen?: readonly string[];
 }
 export interface MutateConfig {
   readonly name: string;
   readonly sql_template: string;
+  readonly notify?: readonly string[];
 }
 
 export type InteractRequest = Query | Mutate | Listen;
@@ -213,28 +215,38 @@ function rowToProto(params: Row): api.Row {
 }
 
 function configToProto(config: Config): api.Config {
-  const p = new api.Config();
+  const proto = new api.Config();
   for (const q of config.queries) {
-    p.addQueries(queryConfigToProto(q));
+    proto.addQueries(queryConfigToProto(q));
   }
   for (const m of config.mutates) {
-    p.addMutates(mutateConfigToProto(m));
+    proto.addMutates(mutateConfigToProto(m));
   }
-  return p;
+  return proto;
 }
 
-function queryConfigToProto(q: QueryConfig): api.StatementConfig {
-  const p = new api.StatementConfig();
-  p.setName(q.name);
-  p.setSqlTemplate(q.sql_template);
-  return p;
+function queryConfigToProto(q: QueryConfig): api.QueryConfig {
+  const proto = new api.QueryConfig();
+  proto.setName(q.name);
+  proto.setSqlTemplate(q.sql_template);
+  if (q.listen) {
+    for (const listen of q.listen) {
+      proto.addListen(listen);
+    }
+  }
+  return proto;
 }
 
-function mutateConfigToProto(m: MutateConfig): api.StatementConfig {
-  const p = new api.StatementConfig();
-  p.setName(m.name);
-  p.setSqlTemplate(m.sql_template);
-  return p;
+function mutateConfigToProto(m: MutateConfig): api.MutateConfig {
+  const proto = new api.MutateConfig();
+  proto.setName(m.name);
+  proto.setSqlTemplate(m.sql_template);
+  if (m.notify) {
+    for (const notify of m.notify) {
+      proto.addNotify(notify);
+    }
+  }
+  return proto;
 }
 
 function configFromProto(p: api.Config): Config | null {
@@ -244,16 +256,18 @@ function configFromProto(p: api.Config): Config | null {
   };
 }
 
-function queryConfigFromProto(p: api.StatementConfig): QueryConfig {
+function queryConfigFromProto(p: api.QueryConfig): QueryConfig {
   return {
     name: p.getName(),
     sql_template: p.getSqlTemplate(),
+    listen: p.getListenList(),
   };
 }
 
-function mutateConfigFromProto(p: api.StatementConfig): MutateConfig {
+function mutateConfigFromProto(p: api.MutateConfig): MutateConfig {
   return {
     name: p.getName(),
     sql_template: p.getSqlTemplate(),
+    notify: p.getNotifyList(),
   };
 }

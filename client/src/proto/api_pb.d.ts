@@ -333,14 +333,14 @@ export namespace InteractResponse {
 
 export class Config extends jspb.Message {
   clearQueriesList(): void;
-  getQueriesList(): Array<StatementConfig>;
-  setQueriesList(value: Array<StatementConfig>): void;
-  addQueries(value?: StatementConfig, index?: number): StatementConfig;
+  getQueriesList(): Array<QueryConfig>;
+  setQueriesList(value: Array<QueryConfig>): void;
+  addQueries(value?: QueryConfig, index?: number): QueryConfig;
 
   clearMutatesList(): void;
-  getMutatesList(): Array<StatementConfig>;
-  setMutatesList(value: Array<StatementConfig>): void;
-  addMutates(value?: StatementConfig, index?: number): StatementConfig;
+  getMutatesList(): Array<MutateConfig>;
+  setMutatesList(value: Array<MutateConfig>): void;
+  addMutates(value?: MutateConfig, index?: number): MutateConfig;
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): Config.AsObject;
@@ -362,43 +362,90 @@ export class Config extends jspb.Message {
 
 export namespace Config {
   export type AsObject = {
-    queriesList: Array<StatementConfig.AsObject>;
-    mutatesList: Array<StatementConfig.AsObject>;
+    queriesList: Array<QueryConfig.AsObject>;
+    mutatesList: Array<MutateConfig.AsObject>;
   };
 }
 
-export class StatementConfig extends jspb.Message {
+export class QueryConfig extends jspb.Message {
   getName(): string;
   setName(value: string): void;
 
   getSqlTemplate(): string;
   setSqlTemplate(value: string): void;
 
+  clearListenList(): void;
+  getListenList(): Array<string>;
+  setListenList(value: Array<string>): void;
+  addListen(value: string, index?: number): string;
+
   serializeBinary(): Uint8Array;
-  toObject(includeInstance?: boolean): StatementConfig.AsObject;
+  toObject(includeInstance?: boolean): QueryConfig.AsObject;
   static toObject(
     includeInstance: boolean,
-    msg: StatementConfig
-  ): StatementConfig.AsObject;
+    msg: QueryConfig
+  ): QueryConfig.AsObject;
   static extensions: { [key: number]: jspb.ExtensionFieldInfo<jspb.Message> };
   static extensionsBinary: {
     [key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>;
   };
   static serializeBinaryToWriter(
-    message: StatementConfig,
+    message: QueryConfig,
     writer: jspb.BinaryWriter
   ): void;
-  static deserializeBinary(bytes: Uint8Array): StatementConfig;
+  static deserializeBinary(bytes: Uint8Array): QueryConfig;
   static deserializeBinaryFromReader(
-    message: StatementConfig,
+    message: QueryConfig,
     reader: jspb.BinaryReader
-  ): StatementConfig;
+  ): QueryConfig;
 }
 
-export namespace StatementConfig {
+export namespace QueryConfig {
   export type AsObject = {
     name: string;
     sqlTemplate: string;
+    listenList: Array<string>;
+  };
+}
+
+export class MutateConfig extends jspb.Message {
+  getName(): string;
+  setName(value: string): void;
+
+  getSqlTemplate(): string;
+  setSqlTemplate(value: string): void;
+
+  clearNotifyList(): void;
+  getNotifyList(): Array<string>;
+  setNotifyList(value: Array<string>): void;
+  addNotify(value: string, index?: number): string;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): MutateConfig.AsObject;
+  static toObject(
+    includeInstance: boolean,
+    msg: MutateConfig
+  ): MutateConfig.AsObject;
+  static extensions: { [key: number]: jspb.ExtensionFieldInfo<jspb.Message> };
+  static extensionsBinary: {
+    [key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>;
+  };
+  static serializeBinaryToWriter(
+    message: MutateConfig,
+    writer: jspb.BinaryWriter
+  ): void;
+  static deserializeBinary(bytes: Uint8Array): MutateConfig;
+  static deserializeBinaryFromReader(
+    message: MutateConfig,
+    reader: jspb.BinaryReader
+  ): MutateConfig;
+}
+
+export namespace MutateConfig {
+  export type AsObject = {
+    name: string;
+    sqlTemplate: string;
+    notifyList: Array<string>;
   };
 }
 

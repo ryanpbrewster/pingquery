@@ -2,7 +2,13 @@ import Client, { Config, InteractResponse } from "./wrapper";
 
 const client = new Client("localhost:50051");
 const CONFIG: Config = {
-  queries: [{ name: "get_counts", sql_template: "SELECT * FROM word_counts" }],
+  queries: [
+    {
+      name: "get_counts",
+      sql_template: "SELECT * FROM word_counts",
+      listen: ["all-words"],
+    },
+  ],
   mutates: [
     {
       name: "add_word",
@@ -10,6 +16,7 @@ const CONFIG: Config = {
         INSERT INTO word_counts (word, count) VALUES (:word, 1)
         ON CONFLICT (word) DO UPDATE SET count = count + 1
       `,
+      notify: ["all-words"],
     },
   ],
 };

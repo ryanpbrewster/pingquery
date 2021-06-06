@@ -63,32 +63,51 @@ impl ClientActor {
     fn handle_user(&mut self, req: api::InteractRequest) -> Result<api::InteractResponse, Status> {
         let id = req.id;
         let req: Interaction = req.try_into()?;
-        let rows = match req {
-            Interaction::Query { name, params } => self.persistence.do_query(&name, &params)?,
-            Interaction::Mutate { name, params } => {
-                let rows = self.persistence.do_query(&name, &params)?;
-                self.listener
-                    .sender
-                    .send(ListenMsg::Ping {
-                        paths: vec![String::new()],
-                    })
-                    .unwrap();
-                rows
-            }
-            Interaction::Listen { name, params } => {
-                self.listener
-                    .sender
-                    .send(ListenMsg::Register {
-                        handle: self.handle.clone(),
-                        path: String::new(),
-                        id,
-                        name: name.clone(),
-                        params: params.clone(),
-                    })
-                    .unwrap();
-                self.persistence.do_query(&name, &params)?
-            }
-        };
+        let rows =
+            match req {
+                Interaction::Query { name, params } => {
+                    let config = self.persistence.get_config()?;
+                    let query = config.queries.get(&name).ok_or_else(|| {
+                        Status::invalid_argument(&format!("no such query: {}", name))
+                    })?;
+                    self.persistence.do_query(&query.sql_template, &params)?
+                }
+                Interaction::Mutate { name, params } => {
+                    let config = self.persistence.get_config()?;
+                    let mutate = config.mutates.get(&name).ok_or_else(|| {
+                        Status::invalid_argument(&format!("no such mutate: {}", name))
+                    })?;
+                    let rows = self.persistence.do_query(&mutate.sql_template, &params)?;
+                    if !mutate.notify.is_empty() {
+                        self.listener
+                            .sender
+                            .send(ListenMsg::Ping {
+                                paths: mutate.notify.clone(),
+                            })
+                            .unwrap();
+                    }
+                    rows
+                }
+                Interaction::Listen { name, params } => {
+                    let config = self.persistence.get_config()?;
+                    let query = config.queries.get(&name).ok_or_else(|| {
+                        Status::invalid_argument(&format!("no such query: {}", name))
+                    })?;
+                    if !query.listen.is_empty() {
+                        self.listener
+                            .sender
+                            .send(ListenMsg::Register {
+                                paths: query.listen.clone(),
+                                handle: self.handle.clone(),
+                                id,
+                                name: name.clone(),
+                                params: params.clone(),
+                            })
+                            .unwrap();
+                    }
+                    self.persistence.do_query(&query.sql_template, &params)?
+                }
+            };
         Ok(api::InteractResponse {
             id,
             rows: rows.into_iter().map(|row| row.into()).collect(),
@@ -101,7 +120,12 @@ impl ClientActor {
         name: String,
         params: Row,
     ) -> Result<api::InteractResponse, Status> {
-        let rows = self.persistence.do_query(&name, &params)?;
+        let config = self.persistence.get_config()?;
+        let query = config
+            .queries
+            .get(&name)
+            .ok_or_else(|| Status::invalid_argument(&format!("no such query: {}", name)))?;
+        let rows = self.persistence.do_query(&query.sql_template, &params)?;
         Ok(api::InteractResponse {
             id,
             rows: rows.into_iter().map(|row| row.into()).collect(),
@@ -112,7 +136,7 @@ impl ClientActor {
 #[derive(Debug)]
 pub enum ListenMsg {
     Register {
-        path: String,
+        paths: Vec<String>,
         handle: ClientHandle,
         id: i32,
         name: String,
@@ -158,12 +182,12 @@ impl ListenActor {
             trace!("[LISTEN] recv {:?}", msg);
             match msg {
                 ListenMsg::Register {
-                    path,
+                    paths,
                     handle,
                     id,
                     name,
                     params,
-                } => self.handle_register(path, handle, id, name, params),
+                } => self.handle_register(paths, handle, id, name, params),
                 ListenMsg::Ping { paths } => self.handle_ping(paths),
             }
         }
@@ -172,18 +196,20 @@ impl ListenActor {
 
     fn handle_register(
         &mut self,
-        path: String,
+        paths: Vec<String>,
         handle: ClientHandle,
         id: i32,
         name: String,
         params: Row,
     ) {
-        self.registry.entry(path).or_default().push(Listen {
-            handle,
-            id,
-            name,
-            params,
-        });
+        for path in paths {
+            self.registry.entry(path).or_default().push(Listen {
+                handle: handle.clone(),
+                id,
+                name: name.clone(),
+                params: params.clone(),
+            });
+        }
     }
     fn handle_ping(&mut self, paths: Vec<String>) {
         for path in paths {

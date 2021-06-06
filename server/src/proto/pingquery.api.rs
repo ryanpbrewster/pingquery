@@ -68,8 +68,8 @@ pub struct QueryConfig {
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub sql_template: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "3")]
-    pub listen: ::prost::alloc::vec::Vec<Path>,
+    #[prost(string, repeated, tag = "3")]
+    pub listen: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MutateConfig {
@@ -77,8 +77,8 @@ pub struct MutateConfig {
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub sql_template: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "3")]
-    pub notify: ::prost::alloc::vec::Vec<Path>,
+    #[prost(string, repeated, tag = "3")]
+    pub notify: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Statement {
@@ -106,11 +106,6 @@ pub mod value {
 pub struct Row {
     #[prost(map = "string, message", tag = "1")]
     pub columns: ::std::collections::HashMap<::prost::alloc::string::String, Value>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Path {
-    #[prost(string, repeated, tag = "1")]
-    pub segments: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[doc = r" Generated client implementations."]
 pub mod ping_query_client {

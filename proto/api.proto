@@ -61,13 +61,13 @@ message Config {
 message QueryConfig {
   string name = 1;
   string sql_template = 2;
-  repeated Path listen = 3;
+  repeated string listen = 3;
 }
 
 message MutateConfig {
   string name = 1;
   string sql_template = 2;
-  repeated Path notify = 3;
+  repeated string notify = 3;
 }
 
 message Statement {
@@ -84,8 +84,4 @@ message Value {
 
 message Row {
   map<string, Value> columns = 1;
-}
-
-message Path {
-  repeated string segments = 1;
 }

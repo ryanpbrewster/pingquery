@@ -1,5 +1,5 @@
 use crate::{
-    config::{Config, MutateConfig, QueryConfig},
+    config::{decode_strings, encode_strings, Config, MutateConfig, QueryConfig},
     proto::api::{ExecRequest, ExecResponse},
     value::{Row, Value},
 };
@@ -28,7 +28,7 @@ impl Persistence {
         txn.commit().unwrap();
         Ok(())
     }
-    pub async fn get_config(&self) -> Result<Config, Status> {
+    pub fn get_config(&self) -> Result<Config, Status> {
         trace!("get_config");
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
@@ -41,19 +41,17 @@ impl Persistence {
         Ok(config)
     }
 
-    pub async fn set_config(&self, config: Config) -> Result<(), Status> {
+    pub fn set_config(&self, config: Config) -> Result<(), Status> {
         trace!("set_config: {:?}", config);
-
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
         clear_tables(&txn);
         write_tables(&txn, &config);
         txn.commit().unwrap();
-        trace!("committed config {:?}", config);
         Ok(())
     }
 
-    pub async fn exec(&self, request: ExecRequest) -> Result<ExecResponse, Status> {
+    pub fn exec(&self, request: ExecRequest) -> Result<ExecResponse, Status> {
         trace!("exec: {:?}", request);
         let raw_sql = request.raw_sql;
         let conn = self.data.get().unwrap();
@@ -70,20 +68,11 @@ impl Persistence {
         })
     }
 
-    pub fn do_query(&self, name: &str, params: &Row) -> Result<Vec<Row>, Status> {
-        let sql_template = {
-            let mut conn = self.metadata.get().unwrap();
-            let txn = conn.transaction().unwrap();
-            find_template(&txn, name)
-                .ok_or_else(|| Status::invalid_argument(&format!("no such statement: {}", name)))?
-        };
-        let rows = {
-            let mut conn = self.data.get().unwrap();
-            let txn = conn.transaction().unwrap();
-            let rows = do_stmt(&txn, &sql_template, params)?;
-            txn.commit().unwrap();
-            rows
-        };
+    pub fn do_query(&self, sql_template: &str, params: &Row) -> Result<Vec<Row>, Status> {
+        let mut conn = self.data.get().unwrap();
+        let txn = conn.transaction().unwrap();
+        let rows = do_stmt(&txn, &sql_template, params)?;
+        txn.commit().unwrap();
         Ok(rows)
     }
 }
@@ -93,7 +82,8 @@ fn init_tables(txn: &rusqlite::Transaction) {
         r#"
         CREATE TABLE IF NOT EXISTS queries (
             name TEXT NOT NULL PRIMARY KEY,
-            sql_template TEXT NOT NULL
+            sql_template TEXT NOT NULL,
+            listen TEXT NOT NULL
         )
     "#,
         [],
@@ -103,7 +93,8 @@ fn init_tables(txn: &rusqlite::Transaction) {
         r#"
         CREATE TABLE IF NOT EXISTS mutates (
             name TEXT NOT NULL PRIMARY KEY,
-            sql_template TEXT NOT NULL
+            sql_template TEXT NOT NULL,
+            notify TEXT NOT NULL
         )
     "#,
         [],
@@ -118,16 +109,28 @@ fn clear_tables(txn: &rusqlite::Transaction) {
 
 fn write_tables(txn: &rusqlite::Transaction, config: &Config) {
     let mut qstmt = txn
-        .prepare("INSERT INTO queries (name, sql_template) VALUES (?, ?)")
+        .prepare("INSERT INTO queries (name, sql_template, listen) VALUES (?, ?, ?)")
         .unwrap();
     for query in config.queries.values() {
-        qstmt.execute([&query.name, &query.sql_template]).unwrap();
+        qstmt
+            .execute(&[
+                &query.name,
+                &query.sql_template,
+                &encode_strings(&query.listen),
+            ])
+            .unwrap();
     }
     let mut mstmt = txn
-        .prepare("INSERT INTO mutates (name, sql_template) VALUES (?, ?)")
+        .prepare("INSERT INTO mutates (name, sql_template, notify) VALUES (?, ?, ?)")
         .unwrap();
     for mutate in config.mutates.values() {
-        mstmt.execute([&mutate.name, &mutate.sql_template]).unwrap();
+        mstmt
+            .execute([
+                &mutate.name,
+                &mutate.sql_template,
+                &encode_strings(&mutate.notify),
+            ])
+            .unwrap();
     }
 }
 
@@ -147,17 +150,6 @@ fn read_config(txn: &rusqlite::Transaction) -> (Vec<QueryConfig>, Vec<MutateConf
             .unwrap()
     };
     (queries, mutates)
-}
-
-fn find_template(txn: &rusqlite::Transaction, name: &str) -> Option<String> {
-    let (queries, mutates) = read_config(txn);
-    if let Some(q) = queries.into_iter().find(|q| q.name == name) {
-        return Some(q.sql_template);
-    };
-    if let Some(m) = mutates.into_iter().find(|q| q.name == name) {
-        return Some(m.sql_template);
-    };
-    None
 }
 
 fn do_stmt(
@@ -185,14 +177,14 @@ fn query_from_sql(row: &rusqlite::Row) -> QueryConfig {
     QueryConfig {
         name: row.get_unwrap("name"),
         sql_template: row.get_unwrap("sql_template"),
-        listen: vec![],
+        listen: decode_strings(row.get_unwrap("listen")),
     }
 }
 fn mutate_from_sql(row: &rusqlite::Row) -> MutateConfig {
     MutateConfig {
         name: row.get_unwrap("name"),
         sql_template: row.get_unwrap("sql_template"),
-        notify: vec![],
+        notify: decode_strings(row.get_unwrap("notify")),
     }
 }
 fn row_from_sql(row: &rusqlite::Row) -> Row {

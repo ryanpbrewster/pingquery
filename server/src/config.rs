@@ -16,19 +16,14 @@ pub struct Config {
 pub struct QueryConfig {
     pub name: String,
     pub sql_template: String,
-    pub listen: Vec<Path>,
+    pub listen: Vec<String>,
 }
 
 #[derive(Debug)]
 pub struct MutateConfig {
     pub name: String,
     pub sql_template: String,
-    pub notify: Vec<Path>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Path {
-    pub segments: Vec<String>,
+    pub notify: Vec<String>,
 }
 
 impl From<Config> for api::Config {
@@ -65,7 +60,7 @@ impl From<QueryConfig> for api::QueryConfig {
         Self {
             name: value.name,
             sql_template: value.sql_template,
-            listen: value.listen.into_iter().map(|p| p.into()).collect(),
+            listen: value.listen,
         }
     }
 }
@@ -84,28 +79,8 @@ impl TryFrom<api::QueryConfig> for QueryConfig {
             } else {
                 value.sql_template
             },
-            listen: value
-                .listen
-                .into_iter()
-                .map(|p| p.try_into())
-                .collect::<Result<_, _>>()?,
+            listen: value.listen,
         })
-    }
-}
-
-impl TryFrom<api::Path> for Path {
-    type Error = Status;
-
-    fn try_from(value: api::Path) -> Result<Self, Self::Error> {
-        let segments: Vec<String> = value.segments;
-        Ok(Path { segments })
-    }
-}
-impl From<Path> for api::Path {
-    fn from(value: Path) -> Self {
-        Self {
-            segments: value.segments,
-        }
     }
 }
 
@@ -114,7 +89,7 @@ impl From<MutateConfig> for api::MutateConfig {
         Self {
             name: value.name,
             sql_template: value.sql_template,
-            notify: value.notify.into_iter().map(|p| p.into()).collect(),
+            notify: value.notify,
         }
     }
 }
@@ -133,11 +108,25 @@ impl TryFrom<api::MutateConfig> for MutateConfig {
             } else {
                 value.sql_template
             },
-            notify: value
-                .notify
-                .into_iter()
-                .map(|p| p.try_into())
-                .collect::<Result<_, _>>()?,
+            notify: value.notify,
         })
+    }
+}
+
+pub fn encode_strings(xs: &[String]) -> String {
+    xs.join("#")
+}
+pub fn decode_strings(raw: String) -> Vec<String> {
+    raw.split("#").map(|s| s.to_owned()).collect()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::config::{decode_strings, encode_strings};
+
+    #[test]
+    fn string_list_encoding_is_bijective() {
+        let xs = vec![];
+        assert_eq!(xs, decode_strings(encode_strings(&xs)));
     }
 }
