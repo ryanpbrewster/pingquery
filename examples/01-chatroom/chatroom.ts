@@ -23,9 +23,7 @@ async function main() {
       id: id++,
       type: "mutate",
       name: "post_message",
-      params: {
-        ":content": line,
-      },
+      params: { content: line },
     });
   });
 }

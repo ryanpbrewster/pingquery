@@ -3,7 +3,7 @@ async function main() {
   const client = new Wrapper("localhost:50051");
   await client.init();
   await client.exec(`
-    CREATE TABLE messages (
+    CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         content TEXT NOT NULL
     )

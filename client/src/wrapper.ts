@@ -145,7 +145,7 @@ function queryToProto(query: Query): api.Statement {
   const proto = new api.Statement();
   proto.setName(query.name);
   if (query.params) {
-    proto.setParams(rowToProto(query.params));
+    proto.setParams(paramsToProto(query.params));
   }
   return proto;
 }
@@ -153,7 +153,7 @@ function mutateToProto(mutate: Mutate): api.Statement {
   const proto = new api.Statement();
   proto.setName(mutate.name);
   if (mutate.params) {
-    proto.setParams(rowToProto(mutate.params));
+    proto.setParams(paramsToProto(mutate.params));
   }
   return proto;
 }
@@ -161,7 +161,7 @@ function listenToProto(listen: Listen): api.Statement {
   const proto = new api.Statement();
   proto.setName(listen.name);
   if (listen.params) {
-    proto.setParams(rowToProto(listen.params));
+    proto.setParams(paramsToProto(listen.params));
   }
   return proto;
 }
@@ -206,10 +206,10 @@ function rowFromProto(p: api.Row): Row {
   });
   return out;
 }
-function rowToProto(params: Row): api.Row {
+function paramsToProto(params: Row): api.Row {
   const proto = new api.Row();
   for (const [k, v] of Object.entries(params)) {
-    proto.getColumnsMap().set(k, valueToProto(v));
+    proto.getColumnsMap().set(`:${k}`, valueToProto(v));
   }
   return proto;
 }

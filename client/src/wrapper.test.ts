@@ -53,7 +53,7 @@ describe("inspect", () => {
       type: "mutate",
       id: 2,
       name: "add_word",
-      params: { ":word": "hello" },
+      params: { word: "hello" },
     });
     expect(await out.poll()).toEqual({ id: 2, rows: [] });
 
@@ -88,7 +88,7 @@ describe("inspect", () => {
       type: "mutate",
       id: 2,
       name: "add_word",
-      params: { ":word": "hello" },
+      params: { word: "hello" },
     });
     expect(await out.poll()).toEqual({ id: 2, rows: [] });
     expect(await out.poll()).toEqual({

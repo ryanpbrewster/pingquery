@@ -57,7 +57,7 @@ impl Persistence {
         let conn = self.data.get().unwrap();
         let mut stmt = conn
             .prepare(&raw_sql)
-            .map_err(|_| Status::invalid_argument("invalid sql"))?;
+            .map_err(|e| Status::invalid_argument(&format!("invalid sql: {}", e)))?;
         let rows: Vec<Row> = stmt
             .query_map([], |row| Ok(row_from_sql(row)))
             .unwrap()
