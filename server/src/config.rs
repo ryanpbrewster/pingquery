@@ -114,10 +114,10 @@ impl TryFrom<api::MutateConfig> for MutateConfig {
 }
 
 pub fn encode_strings(xs: &[String]) -> String {
-    xs.join("#")
+    serde_json::to_string(xs).unwrap()
 }
 pub fn decode_strings(raw: String) -> Vec<String> {
-    raw.split("#").map(|s| s.to_owned()).collect()
+    serde_json::from_str(&raw).unwrap()
 }
 
 #[cfg(test)]
