@@ -167,7 +167,7 @@ fn do_stmt(
         .collect();
     let rows: Vec<Row> = stmt
         .query_map(params.as_slice(), |row| Ok(row_from_sql(row)))
-        .map_err(|_| Status::invalid_argument("failed to query"))?
+        .map_err(|e| Status::invalid_argument(&format!("failed to query: {}", e)))?
         .collect::<Result<_, _>>()
         .map_err(|_| Status::invalid_argument("failed to collect rows"))?;
     Ok(rows)
