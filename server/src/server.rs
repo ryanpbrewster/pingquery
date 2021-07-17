@@ -5,9 +5,9 @@ use crate::{
     config::Config,
     persistence::Persistence,
     proto::api::{
-        ping_query_server::PingQuery, ExecRequest, ExecResponse, GetConfigRequest,
-        GetConfigResponse, InitializeRequest, InitializeResponse, InteractRequest,
-        InteractResponse, SetConfigRequest, SetConfigResponse,
+        ping_query_server::PingQuery, DiagnosticsRequest, DiagnosticsResponse, ExecRequest,
+        ExecResponse, GetConfigRequest, GetConfigResponse, InitializeRequest, InitializeResponse,
+        InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
     },
 };
 
@@ -27,6 +27,12 @@ impl PingQuery for PingQueryService {
     ) -> Result<Response<InitializeResponse>, Status> {
         self.persistence.init().await?;
         Ok(Response::new(InitializeResponse::default()))
+    }
+    async fn diagnostics(
+        &self,
+        _request: Request<DiagnosticsRequest>,
+    ) -> Result<Response<DiagnosticsResponse>, Status> {
+        Err(Status::unimplemented("diagnostics unimplemented"))
     }
     async fn get_config(
         &self,

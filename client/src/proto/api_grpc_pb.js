@@ -4,6 +4,28 @@
 var grpc = require('@grpc/grpc-js');
 var api_pb = require('./api_pb.js');
 
+function serialize_pingquery_api_DiagnosticsRequest(arg) {
+  if (!(arg instanceof api_pb.DiagnosticsRequest)) {
+    throw new Error('Expected argument of type pingquery.api.DiagnosticsRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_pingquery_api_DiagnosticsRequest(buffer_arg) {
+  return api_pb.DiagnosticsRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_pingquery_api_DiagnosticsResponse(arg) {
+  if (!(arg instanceof api_pb.DiagnosticsResponse)) {
+    throw new Error('Expected argument of type pingquery.api.DiagnosticsResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_pingquery_api_DiagnosticsResponse(buffer_arg) {
+  return api_pb.DiagnosticsResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
 function serialize_pingquery_api_ExecRequest(arg) {
   if (!(arg instanceof api_pb.ExecRequest)) {
     throw new Error('Expected argument of type pingquery.api.ExecRequest');
@@ -126,6 +148,17 @@ var PingQueryService = exports.PingQueryService = {
     requestDeserialize: deserialize_pingquery_api_InitializeRequest,
     responseSerialize: serialize_pingquery_api_InitializeResponse,
     responseDeserialize: deserialize_pingquery_api_InitializeResponse,
+  },
+  diagnostics: {
+    path: '/pingquery.api.PingQuery/Diagnostics',
+    requestStream: false,
+    responseStream: false,
+    requestType: api_pb.DiagnosticsRequest,
+    responseType: api_pb.DiagnosticsResponse,
+    requestSerialize: serialize_pingquery_api_DiagnosticsRequest,
+    requestDeserialize: deserialize_pingquery_api_DiagnosticsRequest,
+    responseSerialize: serialize_pingquery_api_DiagnosticsResponse,
+    responseDeserialize: deserialize_pingquery_api_DiagnosticsResponse,
   },
   getConfig: {
     path: '/pingquery.api.PingQuery/GetConfig',

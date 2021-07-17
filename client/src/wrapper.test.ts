@@ -100,6 +100,14 @@ describe("inspect", () => {
   });
 });
 
+describe("diagnostics", () => {
+  it("smoke test", async () => {
+    await client.init();
+    const fetched = await client.diagnostics();
+    expect(fetched).toBeDefined();
+  });
+});
+
 class Deferred<T> {
   resolve: (value: T) => void = () => {};
   reject: (err: Error) => void = () => {};

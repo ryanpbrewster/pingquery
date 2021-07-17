@@ -4,6 +4,7 @@ package pingquery.api;
 
 service PingQuery {
   rpc Initialize (InitializeRequest) returns (InitializeResponse) {}
+  rpc Diagnostics (DiagnosticsRequest) returns (DiagnosticsResponse) {}
 
   rpc GetConfig (GetConfigRequest) returns (GetConfigResponse) {}
   rpc SetConfig (SetConfigRequest) returns (SetConfigResponse) {}
@@ -15,8 +16,17 @@ service PingQuery {
 message InitializeRequest {}
 message InitializeResponse {}
 
-message GetConfigRequest {}
+message DiagnosticsRequest {}
+message DiagnosticsResponse {
+  int32 num_connected_clients = 1;
+  repeated QueryDiagnostics queries = 2;
+}
+message QueryDiagnostics {
+  string name = 1;
+  int64 num_executions = 2;
+}
 
+message GetConfigRequest {}
 message GetConfigResponse {
   Config config = 1;
 }
@@ -24,13 +34,11 @@ message GetConfigResponse {
 message SetConfigRequest {
   Config config = 1;
 }
-
 message SetConfigResponse {}
 
 message ExecRequest {
   string raw_sql = 1;
 }
-
 message ExecResponse {
   repeated Row rows = 1;
 }

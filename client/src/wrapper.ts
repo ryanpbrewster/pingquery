@@ -19,6 +19,13 @@ export default class Client {
       )
     );
   }
+  async diagnostics(): Promise<void> {
+    return new Promise((resolve, reject) =>
+      this.inner.diagnostics(new api.DiagnosticsRequest(), (err, resp) =>
+        resp ? resolve() : reject(err)
+      )
+    );
+  }
   async getConfig(): Promise<Config> {
     return new Promise((resolve, reject) =>
       this.inner.getConfig(new api.GetConfigRequest(), (err, resp) =>

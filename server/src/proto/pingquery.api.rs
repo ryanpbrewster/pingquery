@@ -3,6 +3,22 @@ pub struct InitializeRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitializeResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DiagnosticsRequest {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DiagnosticsResponse {
+    #[prost(int32, tag = "1")]
+    pub num_connected_clients: i32,
+    #[prost(message, repeated, tag = "2")]
+    pub queries: ::prost::alloc::vec::Vec<QueryDiagnostics>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QueryDiagnostics {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub num_executions: i64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetConfigRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetConfigResponse {
@@ -181,6 +197,20 @@ pub mod ping_query_client {
             let path = http::uri::PathAndQuery::from_static("/pingquery.api.PingQuery/Initialize");
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn diagnostics(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DiagnosticsRequest>,
+        ) -> Result<tonic::Response<super::DiagnosticsResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/pingquery.api.PingQuery/Diagnostics");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
         pub async fn get_config(
             &mut self,
             request: impl tonic::IntoRequest<super::GetConfigRequest>,
@@ -253,6 +283,10 @@ pub mod ping_query_server {
             &self,
             request: tonic::Request<super::InitializeRequest>,
         ) -> Result<tonic::Response<super::InitializeResponse>, tonic::Status>;
+        async fn diagnostics(
+            &self,
+            request: tonic::Request<super::DiagnosticsRequest>,
+        ) -> Result<tonic::Response<super::DiagnosticsResponse>, tonic::Status>;
         async fn get_config(
             &self,
             request: tonic::Request<super::GetConfigRequest>,
@@ -335,6 +369,37 @@ pub mod ping_query_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = InitializeSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/pingquery.api.PingQuery/Diagnostics" => {
+                    #[allow(non_camel_case_types)]
+                    struct DiagnosticsSvc<T: PingQuery>(pub Arc<T>);
+                    impl<T: PingQuery> tonic::server::UnaryService<super::DiagnosticsRequest> for DiagnosticsSvc<T> {
+                        type Response = super::DiagnosticsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DiagnosticsRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).diagnostics(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = DiagnosticsSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
                             accept_compression_encodings,
