@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .register_encoded_file_descriptor_set(pingquery::proto::FILE_DESCRIPTOR_SET)
         .build()?;
 
-    let addr = "[::1]:50051".parse().unwrap();
+    let addr = "[::]:50051".parse().unwrap();
     info!("listening @ {}", addr);
     Server::builder()
         .add_service(PingQueryServer::new(service))
