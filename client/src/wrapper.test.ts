@@ -103,8 +103,38 @@ describe("inspect", () => {
 describe("diagnostics", () => {
   it("smoke test", async () => {
     await client.init();
-    const fetched = await client.diagnostics();
-    expect(fetched.numConnectedClients).toEqual(0);
+
+    const stream1 = client.interact();
+    const stream2 = client.interact();
+    const out1 = new DeferQueue();
+    const out2 = new DeferQueue();
+    stream1.onData((data) => out1.push(data));
+    stream2.onData((data) => out2.push(data));
+
+    await stream1.send({ type: "listen", id: 1, name: "get_counts" });
+    await stream2.send({ type: "listen", id: 1, name: "get_counts" });
+    await out1.poll();
+    await out2.poll();
+
+    const before = await client.diagnostics();
+
+    await stream1.send({
+      type: "mutate",
+      id: 2,
+      name: "add_word",
+      params: { word: "hello" },
+    });
+    expect(await out1.poll()).toEqual({ id: 2, rows: [] });
+    await out1.poll();
+    await out2.poll();
+
+    const after = await client.diagnostics();
+    const diff =
+      after.queries.get("get_counts")!.numExecutions -
+      before.queries.get("get_counts")!.numExecutions;
+    expect(diff).toEqual(1);
+    stream1.end();
+    stream2.end();
   });
 });
 

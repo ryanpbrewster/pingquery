@@ -106,10 +106,9 @@ export interface MutateConfig {
 
 export interface Diagnostics {
   readonly numConnectedClients: number;
-  readonly queries: readonly QueryDiagnostics[];
+  readonly queries: ReadonlyMap<string, QueryDiagnostics>;
 }
 export interface QueryDiagnostics {
-  readonly name: string;
   readonly numExecutions: number;
 }
 
@@ -291,12 +290,13 @@ function mutateConfigFromProto(p: api.MutateConfig): MutateConfig {
 function diagnosticsFromProto(p: api.DiagnosticsResponse): Diagnostics | null {
   return {
     numConnectedClients: p.getNumConnectedClients(),
-    queries: p.getQueriesList().map(queryDiagnosticsFromProto),
+    queries: new Map(
+      p.getQueriesList().map((p) => [p.getName(), queryDiagnosticsFromProto(p)])
+    ),
   };
 }
 function queryDiagnosticsFromProto(p: api.QueryDiagnostics): QueryDiagnostics {
   return {
-    name: p.getName(),
     numExecutions: p.getNumExecutions(),
   };
 }
