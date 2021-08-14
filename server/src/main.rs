@@ -2,8 +2,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use log::info;
 use pingquery::{
-    actor::ListenActor, persistence::Persistence, proto::api::ping_query_server::PingQueryServer,
-    server::PingQueryService,
+    actor::ListenActor, diagnostics::Diagnostics, persistence::Persistence,
+    proto::api::ping_query_server::PingQueryServer, server::PingQueryService,
 };
 use r2d2_sqlite::SqliteConnectionManager;
 
@@ -18,16 +18,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let persistence = Persistence {
         metadata: sqlite(flags.metadata)?,
         data: sqlite(flags.data)?,
+        diagnostics: Arc::new(Diagnostics::default()),
     };
     let service = PingQueryService {
         persistence: Arc::new(persistence),
         listener: ListenActor::start(),
     };
+    let reflection = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(pingquery::proto::FILE_DESCRIPTOR_SET)
+        .build()?;
 
     let addr = "[::1]:50051".parse().unwrap();
     info!("listening @ {}", addr);
     Server::builder()
         .add_service(PingQueryServer::new(service))
+        .add_service(reflection)
         .serve(addr)
         .await?;
 

@@ -104,7 +104,7 @@ describe("diagnostics", () => {
   it("smoke test", async () => {
     await client.init();
     const fetched = await client.diagnostics();
-    expect(fetched).toBeDefined();
+    expect(fetched.numConnectedClients).toEqual(0);
   });
 });
 

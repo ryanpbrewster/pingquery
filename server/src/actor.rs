@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, convert::TryInto, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    convert::TryInto,
+    sync::{atomic::Ordering, Arc},
+};
 
 use log::trace;
 use tokio::sync::mpsc;
@@ -47,6 +51,10 @@ impl ClientActor {
         handle
     }
     async fn run(mut self) {
+        self.persistence
+            .diagnostics
+            .num_connected_clients
+            .fetch_add(1, Ordering::SeqCst);
         trace!("[ACTOR] starting...");
         while let Some(msg) = self.inputs.recv().await {
             trace!("[ACTOR] recv {:?}", msg);
@@ -58,6 +66,10 @@ impl ClientActor {
             self.outputs.send(resp).unwrap();
         }
         trace!("[ACTOR] exiting...");
+        self.persistence
+            .diagnostics
+            .num_connected_clients
+            .fetch_sub(1, Ordering::SeqCst);
     }
 
     fn handle_user(&mut self, req: api::InteractRequest) -> Result<api::InteractResponse, Status> {
@@ -70,14 +82,17 @@ impl ClientActor {
                     let query = config.queries.get(&name).ok_or_else(|| {
                         Status::invalid_argument(&format!("no such query: {}", name))
                     })?;
-                    self.persistence.do_query(&query.sql_template, &params)?
+                    self.persistence
+                        .do_query(name, &query.sql_template, &params)?
                 }
                 Interaction::Mutate { name, params } => {
                     let config = self.persistence.get_config()?;
                     let mutate = config.mutates.get(&name).ok_or_else(|| {
                         Status::invalid_argument(&format!("no such mutate: {}", name))
                     })?;
-                    let rows = self.persistence.do_query(&mutate.sql_template, &params)?;
+                    let rows = self
+                        .persistence
+                        .do_query(name, &mutate.sql_template, &params)?;
                     if !mutate.notify.is_empty() {
                         self.listener
                             .sender
@@ -105,7 +120,8 @@ impl ClientActor {
                             })
                             .unwrap();
                     }
-                    self.persistence.do_query(&query.sql_template, &params)?
+                    self.persistence
+                        .do_query(name, &query.sql_template, &params)?
                 }
             };
         Ok(api::InteractResponse {
@@ -125,7 +141,9 @@ impl ClientActor {
             .queries
             .get(&name)
             .ok_or_else(|| Status::invalid_argument(&format!("no such query: {}", name)))?;
-        let rows = self.persistence.do_query(&query.sql_template, &params)?;
+        let rows = self
+            .persistence
+            .do_query(name, &query.sql_template, &params)?;
         Ok(api::InteractResponse {
             id,
             rows: rows.into_iter().map(|row| row.into()).collect(),

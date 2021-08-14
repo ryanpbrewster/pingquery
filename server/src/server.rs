@@ -11,6 +11,7 @@ use crate::{
     },
 };
 
+use log::info;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 
@@ -32,7 +33,9 @@ impl PingQuery for PingQueryService {
         &self,
         _request: Request<DiagnosticsRequest>,
     ) -> Result<Response<DiagnosticsResponse>, Status> {
-        Err(Status::unimplemented("diagnostics unimplemented"))
+        let report = self.persistence.diagnostics().await?;
+        info!("[RPB] diagnostics = {:?}", report);
+        Ok(Response::new(report.into()))
     }
     async fn get_config(
         &self,

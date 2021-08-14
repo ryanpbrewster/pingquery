@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use crate::{
     config::{decode_strings, encode_strings, Config, MutateConfig, QueryConfig},
+    diagnostics::{Diagnostics, DiagnosticsReport},
     proto::api::{ExecRequest, ExecResponse},
     value::{Row, Value},
 };
@@ -17,6 +20,7 @@ use tonic::Status;
 pub struct Persistence {
     pub metadata: Pool<SqliteConnectionManager>,
     pub data: Pool<SqliteConnectionManager>,
+    pub diagnostics: Arc<Diagnostics>,
 }
 
 impl Persistence {
@@ -28,6 +32,11 @@ impl Persistence {
         txn.commit().unwrap();
         Ok(())
     }
+    pub async fn diagnostics(&self) -> Result<DiagnosticsReport, Status> {
+        trace!("diagnostics");
+        Ok(self.diagnostics.report())
+    }
+
     pub fn get_config(&self) -> Result<Config, Status> {
         trace!("get_config");
         let mut conn = self.metadata.get().unwrap();
@@ -68,7 +77,18 @@ impl Persistence {
         })
     }
 
-    pub fn do_query(&self, sql_template: &str, params: &Row) -> Result<Vec<Row>, Status> {
+    pub fn do_query(
+        &self,
+        name: String,
+        sql_template: &str,
+        params: &Row,
+    ) -> Result<Vec<Row>, Status> {
+        self.diagnostics
+            .queries
+            .entry(name)
+            .or_default()
+            .num_executions
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut conn = self.data.get().unwrap();
         let txn = conn.transaction().unwrap();
         let rows = do_stmt(&txn, &sql_template, params)?;

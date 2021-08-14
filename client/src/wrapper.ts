@@ -19,10 +19,10 @@ export default class Client {
       )
     );
   }
-  async diagnostics(): Promise<void> {
+  async diagnostics(): Promise<Diagnostics> {
     return new Promise((resolve, reject) =>
       this.inner.diagnostics(new api.DiagnosticsRequest(), (err, resp) =>
-        resp ? resolve() : reject(err)
+        resp ? resolve(diagnosticsFromProto(resp)!) : reject(err)
       )
     );
   }
@@ -102,6 +102,15 @@ export interface MutateConfig {
   readonly name: string;
   readonly sql_template: string;
   readonly notify?: readonly string[];
+}
+
+export interface Diagnostics {
+  readonly numConnectedClients: number;
+  readonly queries: readonly QueryDiagnostics[];
+}
+export interface QueryDiagnostics {
+  readonly name: string;
+  readonly numExecutions: number;
 }
 
 export type InteractRequest = Query | Mutate | Listen;
@@ -276,5 +285,18 @@ function mutateConfigFromProto(p: api.MutateConfig): MutateConfig {
     name: p.getName(),
     sql_template: p.getSqlTemplate(),
     notify: p.getNotifyList(),
+  };
+}
+
+function diagnosticsFromProto(p: api.DiagnosticsResponse): Diagnostics | null {
+  return {
+    numConnectedClients: p.getNumConnectedClients(),
+    queries: p.getQueriesList().map(queryDiagnosticsFromProto),
+  };
+}
+function queryDiagnosticsFromProto(p: api.QueryDiagnostics): QueryDiagnostics {
+  return {
+    name: p.getName(),
+    numExecutions: p.getNumExecutions(),
   };
 }
