@@ -9,7 +9,7 @@ import * as api from "./proto/api_pb";
 export default class Client {
   private readonly inner: PingQueryClient;
   constructor(address: string) {
-    this.inner = new PingQueryClient(address, credentials.createInsecure());
+    this.inner = new PingQueryClient(address, credentials.createSsl());
   }
 
   async init(): Promise<void> {

@@ -8,7 +8,6 @@ use pingquery::{
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
-use tonic::transport::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,12 +29,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr = "[::]:50051".parse().unwrap();
     info!("listening @ {}", addr);
-    Server::builder()
+    tonic::transport::Server::builder()
         .add_service(PingQueryServer::new(service))
         .add_service(reflection)
         .serve(addr)
         .await?;
-
     Ok(())
 }
 
