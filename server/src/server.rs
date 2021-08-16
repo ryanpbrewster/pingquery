@@ -5,7 +5,7 @@ use crate::{
     config::Config,
     persistence::Persistence,
     proto::api::{
-        ping_query_server::PingQuery, DiagnosticsRequest, DiagnosticsResponse, ExecRequest,
+        DiagnosticsRequest, DiagnosticsResponse, ExecRequest,
         ExecResponse, GetConfigRequest, GetConfigResponse, InitializeRequest, InitializeResponse,
         InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
     },
@@ -14,28 +14,28 @@ use crate::{
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 
+#[derive(Clone)]
 pub struct PingQueryService {
     pub persistence: Arc<Persistence>,
     pub listener: ListenHandle,
 }
 
-#[tonic::async_trait]
-impl PingQuery for PingQueryService {
-    async fn initialize(
+impl PingQueryService {
+    pub async fn initialize(
         &self,
-        _request: Request<InitializeRequest>,
-    ) -> Result<Response<InitializeResponse>, Status> {
+        _request: InitializeRequest,
+    ) -> Result<InitializeResponse, Status> {
         self.persistence.init().await?;
-        Ok(Response::new(InitializeResponse::default()))
+        Ok(InitializeResponse::default())
     }
-    async fn diagnostics(
+    pub async fn diagnostics(
         &self,
-        _request: Request<DiagnosticsRequest>,
-    ) -> Result<Response<DiagnosticsResponse>, Status> {
+        _request: DiagnosticsRequest,
+    ) -> Result<DiagnosticsResponse, Status> {
         let report = self.persistence.diagnostics().await?;
-        Ok(Response::new(report.into()))
+        Ok(report.into())
     }
-    async fn get_config(
+    pub async fn get_config(
         &self,
         _request: Request<GetConfigRequest>,
     ) -> Result<Response<GetConfigResponse>, Status> {
@@ -45,7 +45,7 @@ impl PingQuery for PingQueryService {
         }))
     }
 
-    async fn set_config(
+    pub async fn set_config(
         &self,
         request: Request<SetConfigRequest>,
     ) -> Result<Response<SetConfigResponse>, Status> {
@@ -58,17 +58,14 @@ impl PingQuery for PingQueryService {
         Ok(Response::new(SetConfigResponse::default()))
     }
 
-    async fn exec(&self, request: Request<ExecRequest>) -> Result<Response<ExecResponse>, Status> {
-        let resp = self.persistence.exec(request.into_inner())?;
-        Ok(Response::new(resp))
+    pub async fn exec(&self, request: ExecRequest) -> Result<ExecResponse, Status> {
+        self.persistence.exec(request)
     }
 
-    type InteractStream = UnboundedReceiverStream<Result<InteractResponse, Status>>;
-
-    async fn interact(
+    pub async fn interact(
         &self,
         request: Request<Streaming<InteractRequest>>,
-    ) -> Result<Response<Self::InteractStream>, Status> {
+    ) -> Result<Response<UnboundedReceiverStream<Result<InteractResponse, Status>>>, Status> {
         let persistence = self.persistence.clone();
         let listener = self.listener.clone();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();

@@ -1,15 +1,16 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Instant};
+
+use actix::{Actor, StreamHandler};
+use actix_web::{App, Error, HttpRequest, HttpResponse, HttpServer, middleware, web::{self, Data}};
+use actix_web_actors::ws;
 
 use log::info;
-use pingquery::{
-    actor::ListenActor, diagnostics::Diagnostics, persistence::Persistence,
-    proto::api::ping_query_server::PingQueryServer, server::PingQueryService,
-};
+use pingquery::{actor::ListenActor, diagnostics::Diagnostics, persistence::Persistence, proto::api::{DiagnosticsRequest, ExecRequest, ExecResponse, InitializeRequest, InitializeResponse}, server::PingQueryService};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let flags = CliFlags::from_args();
@@ -23,18 +24,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         persistence: Arc::new(persistence),
         listener: ListenActor::start(),
     };
-    let reflection = tonic_reflection::server::Builder::configure()
-        .register_encoded_file_descriptor_set(pingquery::proto::FILE_DESCRIPTOR_SET)
-        .build()?;
-
-    let addr = "[::]:50051".parse().unwrap();
+    let addr = "[::]:8080";
     info!("listening @ {}", addr);
-    tonic::transport::Server::builder()
-        .add_service(PingQueryServer::new(service))
-        .add_service(reflection)
-        .serve(addr)
-        .await?;
+    HttpServer::new(move || {
+        App::new()
+            // enable logger
+            .wrap(middleware::Logger::default())
+            .service(web::resource("/diagnostics").app_data(Data::new(service.clone())).route(web::post().to(diagnostics_handler)))
+            .service(web::resource("/exec").app_data(Data::new(service.clone())).route(web::post().to(exec_handler)))
+            .service(web::resource("/initialize").app_data(Data::new(service.clone())).route(web::post().to(initialize_handler)))
+            .default_service(web::route().to(p404))
+    })
+    .bind(addr)?
+    .run()
+    .await?;
+
     Ok(())
+}
+
+async fn initialize_handler(service: web::Data<PingQueryService>, request: web::Json<InitializeRequest>) -> HttpResponse {
+    match service.get_ref().initialize(request.into_inner()).await {
+        Ok(v) => HttpResponse::Ok().json(v),
+        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+    }
+}
+
+async fn exec_handler(service: web::Data<PingQueryService>, request: web::Json<ExecRequest>) -> HttpResponse {
+    match service.get_ref().exec(request.into_inner()).await {
+        Ok(v) => HttpResponse::Ok().json(v),
+        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+    }
+}
+
+async fn diagnostics_handler(service: web::Data<PingQueryService>, request: web::Json<DiagnosticsRequest>) -> HttpResponse {
+    match service.get_ref().diagnostics(request.into_inner()).await {
+        Ok(v) => HttpResponse::Ok().json(v),
+        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+    }
+}
+
+async fn p404() -> HttpResponse {
+    HttpResponse::NotFound().body("Not Found")
 }
 
 #[derive(StructOpt)]
