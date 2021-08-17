@@ -16,7 +16,10 @@ export default class Client {
 
   async init(): Promise<void> {
     const req: api.InitializeRequest = {};
-    await this.doPost("initialize", req);
+    await this.doPost(
+      "initialize",
+      api.InitializeRequest.toJSON(req) as object
+    );
   }
   async diagnostics(): Promise<Diagnostics> {
     const resp: api.DiagnosticsResponse = await this.doGet("diagnostics");
@@ -27,11 +30,14 @@ export default class Client {
   }
   async setConfig(config: Config): Promise<void> {
     const request: api.SetConfigRequest = { config: configToProto(config) };
-    return await this.doPost("config", request);
+    return await this.doPost(
+      "config",
+      api.SetConfigRequest.toJSON(request) as object
+    );
   }
   async exec(raw_sql: string): Promise<Row[]> {
     const request: api.ExecRequest = { rawSql: raw_sql };
-    return await this.doPost("exec", request);
+    return await this.doPost("exec", api.ExecRequest.toJSON(request) as object);
   }
   interact(): InteractWrapper {
     return new InteractWrapper(this.address);
@@ -52,12 +58,25 @@ class InteractWrapper {
     socket.on("message", (data) => {
       const msg = (data as Buffer).toString();
       console.log("[RECV]", msg);
-      this.dataCb(interactResponseFromProto(JSON.parse(msg)));
+      this.dataCb(
+        interactResponseFromProto(
+          api.InteractResponse.fromJSON(JSON.parse(msg))
+        )
+      );
+    });
+    socket.on("error", (err) => {
+      console.error(err);
+      this.errorCb(err);
+    });
+    socket.on("close", (reason) => {
+      this.endCb();
     });
   }
 
   async send(req: InteractRequest): Promise<void> {
-    const msg = JSON.stringify(interactRequestToProto(req));
+    const msg = JSON.stringify(
+      api.InteractRequest.toJSON(interactRequestToProto(req))
+    );
     const socket = await this.socket.promise;
     console.log(`[SEND] ${msg}`);
     socket.send(msg);
@@ -177,21 +196,24 @@ function interactResponseFromProto(
 function valueToProto(v: Value): api.Value {
   switch (typeof v) {
     case "number":
-      return { integer: v, text: undefined };
+      return { integer: v, text: "" };
     case "string":
-      return { text: v, integer: undefined };
+      return { text: v, integer: 0 };
   }
 }
-function valueFromProto(p: api.Value): Value {
-  if (p.text) return p.text;
+function valueFromProto(p: api.Value): Value | null {
   if (p.integer) return p.integer;
-  return 0;
+  if (p.text) return p.text;
+  return null;
 }
 
 function rowFromProto(p: api.Row): Row {
   const out: Row = {};
   Object.entries(p.columns).forEach(([k, v]) => {
-    out[k] = valueFromProto(v);
+    const value = valueFromProto(v);
+    if (value !== null) {
+      out[k] = value;
+    }
   });
   return out;
 }

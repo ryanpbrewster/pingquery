@@ -12,4 +12,5 @@ $PROTOC \
     --plugin=protoc-gen-ts_proto=$PROTOC_GEN_TS_PATH \
     --js_out=import_style=commonjs:$OUT_DIR \
     --ts_proto_out=$TS_OUT_DIR \
+    --ts_proto_opt=outputEncodeMethods=false,outputJsonMethods=true,outputPartialMethods=false,outputClientImpl=false,stringEnums=true,oneof=unions,forceLong=number,esModuleInterop=true \
     "$IN_DIR"/*.proto

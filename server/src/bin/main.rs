@@ -8,7 +8,7 @@ use actix_web::{
 };
 
 use actix_web_actors::ws::{self, CloseReason};
-use log::{debug, info};
+use log::{debug, info, warn};
 use pingquery::{actor::{ClientHandle, ClientMsg, ListenActor}, diagnostics::Diagnostics, persistence::Persistence, proto::api::{
         DiagnosticsRequest, ExecRequest, InitializeRequest, InteractRequest, InteractResponse,
         SetConfigRequest,
@@ -161,6 +161,12 @@ impl Actor for InteractSession {
     fn started(&mut self, ctx: &mut Self::Context) {
         self.client = Some(self.service.interact(ctx.address().recipient()));
     }
+    fn stopping(&mut  self, ctx: &mut Self::Context) -> actix::Running { 
+        if let Some(client) = &self.client {
+            client.sender.send(ClientMsg::End).unwrap();
+        }
+        actix::Running::Stop
+    }
 }
 
 impl Handler<PQResult> for InteractSession {
@@ -192,7 +198,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for InteractSession {
                 info!("[WS] req: {:?}", req);
                 self.client.as_ref().unwrap().sender.send(ClientMsg::User(req)).unwrap();
             }
-            _ => (),
+            Ok(ws::Message::Close(r)) => {
+                ctx.close(r);
+            }
+            Err(e) => {
+                warn!("[WS] closing because of {}", e);
+                ctx.close(None);
+            }
+            Ok(_) => {},
         }
     }
 }
