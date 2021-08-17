@@ -48,11 +48,9 @@ message InteractRequest {
   /// Must be monotonically increasing.
   int32 id = 1;
 
-  oneof type {
-    Statement mutate = 2;
-    Statement query = 3;
-    Statement listen = 4;
-  }
+  Statement mutate = 2;
+  Statement query = 3;
+  Statement listen = 4;
 }
 
 message InteractResponse {
@@ -84,10 +82,8 @@ message Statement {
 }
 
 message Value {
-  oneof type {
-    int64 integer = 1;
-    string text = 2;
-  }
+  int64 integer = 1;
+  string text = 2;
 }
 
 message Row {

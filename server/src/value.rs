@@ -23,21 +23,24 @@ impl TryFrom<api::Value> for Value {
     type Error = Status;
 
     fn try_from(v: api::Value) -> Result<Self, Self::Error> {
-        match v.r#type {
-            Some(api::value::Type::Integer(n)) => Ok(Value::Integer(n)),
-            Some(api::value::Type::Text(s)) => Ok(Value::Text(s)),
-            None => Err(Status::invalid_argument("missing value")),
+        if !v.text.is_empty() {
+            Ok(Value::Text(v.text))
+        } else {
+            Ok(Value::Integer(v.integer))
         }
     }
 }
 impl From<Value> for api::Value {
     fn from(v: Value) -> Self {
-        let inner = match v {
-            Value::Integer(n) => api::value::Type::Integer(n),
-            Value::Text(s) => api::value::Type::Text(s),
-        };
-        api::Value {
-            r#type: Some(inner),
+        match v {
+            Value::Integer(n) => api::Value {
+                integer: n,
+                ..Default::default()
+            },
+            Value::Text(s) => api::Value {
+                text: s,
+                ..Default::default()
+            },
         }
     }
 }

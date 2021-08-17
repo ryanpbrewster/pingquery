@@ -4,16 +4,12 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
+use actix::Recipient;
 use log::trace;
 use tokio::sync::mpsc;
 use tonic::Status;
 
-use crate::{
-    persistence::Persistence,
-    proto::api::{self, InteractResponse},
-    requests::Interaction,
-    value::Row,
-};
+use crate::{persistence::Persistence, proto::api::{self, InteractResponse}, requests::Interaction, server::PQResult, value::Row};
 
 #[derive(Debug)]
 pub enum ClientMsg {
@@ -28,13 +24,13 @@ pub struct ClientHandle {
 pub struct ClientActor {
     handle: ClientHandle,
     inputs: mpsc::UnboundedReceiver<ClientMsg>,
-    outputs: mpsc::UnboundedSender<Result<InteractResponse, Status>>,
+    addr: Recipient<PQResult>,
     persistence: Arc<Persistence>,
     listener: ListenHandle,
 }
 impl ClientActor {
     pub fn start(
-        outputs: mpsc::UnboundedSender<Result<InteractResponse, Status>>,
+        addr: Recipient<PQResult>,
         persistence: Arc<Persistence>,
         listener: ListenHandle,
     ) -> ClientHandle {
@@ -43,7 +39,7 @@ impl ClientActor {
         let actor = ClientActor {
             handle: handle.clone(),
             inputs: receiver,
-            outputs,
+            addr,
             persistence,
             listener,
         };
@@ -63,7 +59,9 @@ impl ClientActor {
                 ClientMsg::User(req) => self.handle_user(req),
                 ClientMsg::Requery { id, name, params } => self.handle_requery(id, name, params),
             };
-            self.outputs.send(resp).unwrap();
+            if self.addr.try_send(PQResult(resp)).is_err() {
+                break;
+            }
         }
         trace!("[ACTOR] exiting...");
         self.persistence

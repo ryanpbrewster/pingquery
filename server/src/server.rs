@@ -1,11 +1,17 @@
 use std::{convert::TryInto, sync::Arc};
 
-use crate::{actor::{ClientActor, ClientHandle, ClientMsg, ListenHandle}, config::Config, persistence::Persistence, proto::api::{
+use crate::{
+    actor::{ClientActor, ClientHandle, ClientMsg, ListenHandle},
+    config::Config,
+    persistence::Persistence,
+    proto::api::{
         DiagnosticsRequest, DiagnosticsResponse, ExecRequest, ExecResponse, GetConfigResponse,
         InitializeRequest, InitializeResponse, InteractRequest, InteractResponse, SetConfigRequest,
         SetConfigResponse,
-    }};
+    },
+};
 
+use actix::{Message, Recipient};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
@@ -26,7 +32,6 @@ impl PingQueryService {
     }
     pub async fn diagnostics(
         &self,
-        _request: DiagnosticsRequest,
     ) -> Result<DiagnosticsResponse, Status> {
         let report = self.persistence.diagnostics().await?;
         Ok(report.into())
@@ -53,10 +58,15 @@ impl PingQueryService {
 
     pub fn interact(
         &self,
-        outputs: UnboundedSender<Result<InteractResponse, Status>>,
+        addr: Recipient<PQResult>,
     ) -> ClientHandle {
         let persistence = self.persistence.clone();
         let listener = self.listener.clone();
-        ClientActor::start(outputs, persistence, listener)
+        ClientActor::start(addr, persistence, listener)
     }
+}
+
+pub struct PQResult(pub Result<InteractResponse, Status>);
+impl Message for PQResult {
+    type Result = ();
 }

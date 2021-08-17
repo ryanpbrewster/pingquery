@@ -1,11 +1,18 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use actix::{Actor, AsyncContext, StreamHandler, WrapFuture};
-use actix_web::{App, Error, HttpRequest, HttpResponse, HttpServer, middleware, web::{self, Data}};
+use actix::{Actor, AsyncContext, Handler, StreamHandler, WrapFuture};
+use actix_web::{
+    middleware,
+    web::{self, Data},
+    App, Error, HttpRequest, HttpResponse, HttpServer,
+};
 
-use actix_web_actors::ws;
+use actix_web_actors::ws::{self, CloseReason};
 use log::{debug, info};
-use pingquery::{actor::{ClientHandle, ListenActor}, diagnostics::Diagnostics, persistence::Persistence, proto::api::{DiagnosticsRequest, ExecRequest, InitializeRequest, InteractResponse, SetConfigRequest}, server::PingQueryService};
+use pingquery::{actor::{ClientHandle, ClientMsg, ListenActor}, diagnostics::Diagnostics, persistence::Persistence, proto::api::{
+        DiagnosticsRequest, ExecRequest, InitializeRequest, InteractRequest, InteractResponse,
+        SetConfigRequest,
+    }, server::{PQResult, PingQueryService}};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
@@ -35,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .service(
                 web::resource("/diagnostics")
                     .app_data(Data::new(service.clone()))
-                    .route(web::post().to(diagnostics_handler)),
+                    .route(web::get().to(diagnostics_handler)),
             )
             .service(
                 web::resource("/exec")
@@ -95,9 +102,8 @@ async fn exec_handler(
 
 async fn diagnostics_handler(
     service: web::Data<PingQueryService>,
-    request: web::Json<DiagnosticsRequest>,
 ) -> HttpResponse {
-    match service.get_ref().diagnostics(request.into_inner()).await {
+    match service.get_ref().diagnostics().await {
         Ok(v) => HttpResponse::Ok().json(v),
         Err(e) => {
             debug!("error: {:?}", e);
@@ -136,36 +142,56 @@ async fn interact_handler(
     r: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse, Error> {
-    let (tx, rx) = mpsc::unbounded_channel();
-    let handle = service.get_ref().interact(tx);
     let session = InteractSession {
-        outputs: rx,
-        client: handle,
+        service: service.into_inner(),
+        client: None,
     };
-    ws::start(session, &r, stream)
+    let (_addr, resp) = ws::start_with_addr(session, &r, stream)?;
+    Ok(resp)
 }
 
-
 struct InteractSession {
-    outputs: UnboundedReceiver<Result<InteractResponse, Status>>,
-    client: ClientHandle,
+    service: Arc<PingQueryService>,
+    client: Option<ClientHandle>,
 }
 
 impl Actor for InteractSession {
     type Context = ws::WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        self.client = Some(self.service.interact(ctx.address().recipient()));
+    }
+}
+
+impl Handler<PQResult> for InteractSession {
+    type Result = ();
+
+    fn handle(&mut self, msg: PQResult, ctx: &mut Self::Context) -> Self::Result {
+        match msg.0 {
+            Ok(v) => ctx.text(serde_json::to_string(&v).unwrap()),
+            Err(e) => ctx.close(None)
+        }
+    }
 }
 
 /// Handler for ws::Message message
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for InteractSession {
-    fn handle(
-        &mut self,
-        msg: Result<ws::Message, ws::ProtocolError>,
-        ctx: &mut Self::Context,
-    ) {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         info!("[WS] incoming: {:?}", msg);
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
-            Ok(ws::Message::Text(text)) => ctx.text(text),
+            Ok(ws::Message::Text(text)) => {
+                let req: InteractRequest = match serde_json::from_slice(text.as_bytes()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        ctx.text(e.to_string());
+                        ctx.close(None);
+                        return;
+                    }
+                };
+                info!("[WS] req: {:?}", req);
+                self.client.as_ref().unwrap().sender.send(ClientMsg::User(req)).unwrap();
+            }
             _ => (),
         }
     }

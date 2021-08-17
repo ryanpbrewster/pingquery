@@ -1,4 +1,4 @@
-import Client, { Config, InteractResponse } from "./wrapper";
+import Client, { Config, Deferred, InteractResponse } from "./wrapper";
 
 const client = new Client("localhost:8080");
 const CONFIG: Config = {
@@ -63,7 +63,7 @@ describe("inspect", () => {
       rows: [{ word: "hello", count: 1 }],
     });
 
-    stream.end();
+    await stream.end();
   });
 
   it("word count listen", async () => {
@@ -96,7 +96,7 @@ describe("inspect", () => {
       rows: [{ word: "hello", count: 1 }],
     });
 
-    stream.end();
+    await stream.end();
   });
 });
 
@@ -133,22 +133,10 @@ describe("diagnostics", () => {
       after.queries.get("get_counts")!.numExecutions -
       before.queries.get("get_counts")!.numExecutions;
     expect(diff).toEqual(1);
-    stream1.end();
-    stream2.end();
+    await stream1.end();
+    await stream2.end();
   });
 });
-
-class Deferred<T> {
-  resolve: (value: T) => void = () => {};
-  reject: (err: Error) => void = () => {};
-  promise: Promise<T>;
-  constructor() {
-    this.promise = new Promise<T>((res, rej) => {
-      this.resolve = res;
-      this.reject = rej;
-    });
-  }
-}
 
 class DeferQueue<T> {
   private readonly buf: Deferred<T>[] = [];

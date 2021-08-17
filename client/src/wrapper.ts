@@ -1,12 +1,15 @@
 import * as api from "./proto/api";
 import got from "got";
+import WebSocket from "ws";
 
 export default class Client {
   constructor(private readonly address: string) {}
   private async doGet<T>(path: string): Promise<T> {
+    console.log(`[GET] ${path}`);
     return got.get(`http://${this.address}/${path}`).json();
   }
   private async doPost<T>(path: string, json: object): Promise<T> {
+    console.log(`[POST] ${path} -> ${JSON.stringify(json)}`);
     const resp = got.post(`http://${this.address}/${path}`, { json });
     return await resp.json();
   }
@@ -16,7 +19,8 @@ export default class Client {
     await this.doPost("initialize", req);
   }
   async diagnostics(): Promise<Diagnostics> {
-    return await this.doGet("diagnostics");
+    const resp: api.DiagnosticsResponse = await this.doGet("diagnostics");
+    return diagnosticsFromProto(resp)!;
   }
   async getConfig(): Promise<Config | null> {
     return configFromProto(await this.doGet("config"));
@@ -30,30 +34,46 @@ export default class Client {
     return await this.doPost("exec", request);
   }
   interact(): InteractWrapper {
-    return new InteractWrapper();
+    return new InteractWrapper(this.address);
   }
 }
 
 class InteractWrapper {
-  constructor() {}
+  private readonly socket: Deferred<WebSocket> = new Deferred();
+  private dataCb: (resp: InteractResponse) => void = () => {};
+  private endCb: () => void = () => {};
+  private errorCb: (err: Error) => void = () => {};
 
-  send(req: InteractRequest): Promise<void> {
-    const proto = interactRequestToProto(req);
-    return new Promise((resolve) => {
-      // this.inner.write(proto, () => resolve());
+  constructor(address: string) {
+    const socket = new WebSocket(`ws://${address}/interact`);
+    socket.on("open", () => {
+      this.socket.resolve(socket);
+    });
+    socket.on("message", (data) => {
+      const msg = (data as Buffer).toString();
+      console.log("[RECV]", msg);
+      this.dataCb(interactResponseFromProto(JSON.parse(msg)));
     });
   }
-  end() {
-    // this.inner.end();
+
+  async send(req: InteractRequest): Promise<void> {
+    const msg = JSON.stringify(interactRequestToProto(req));
+    const socket = await this.socket.promise;
+    console.log(`[SEND] ${msg}`);
+    socket.send(msg);
+  }
+  async end(): Promise<void> {
+    const socket = await this.socket.promise;
+    socket.close();
   }
   onData(cb: (resp: InteractResponse) => void): void {
-    // this.inner.on("data", (chunk) => cb(interactResponseFromProto(chunk)));
+    this.dataCb = cb;
   }
   onEnd(cb: () => void): void {
-    // this.inner.on("end", () => cb());
+    this.endCb = cb;
   }
   onError(cb: (resp: Error) => void): void {
-    // this.inner.on("error", (err) => cb(err));
+    this.errorCb = cb;
   }
 }
 
@@ -162,19 +182,16 @@ function valueToProto(v: Value): api.Value {
       return { text: v, integer: undefined };
   }
 }
-function valueFromProto(p: api.Value): Value | null {
-  if (p.integer !== undefined) return p.integer;
-  if (p.text !== undefined) return p.text;
-  return null;
+function valueFromProto(p: api.Value): Value {
+  if (p.text) return p.text;
+  if (p.integer) return p.integer;
+  return 0;
 }
 
 function rowFromProto(p: api.Row): Row {
   const out: Row = {};
   Object.entries(p.columns).forEach(([k, v]) => {
-    const value = valueFromProto(v);
-    if (value) {
-      out[k] = value;
-    }
+    out[k] = valueFromProto(v);
   });
   return out;
 }
@@ -244,4 +261,16 @@ function queryDiagnosticsFromProto(p: api.QueryDiagnostics): QueryDiagnostics {
   return {
     numExecutions: p.numExecutions,
   };
+}
+
+export class Deferred<T> {
+  resolve: (value: T) => void = () => {};
+  reject: (err: Error) => void = () => {};
+  promise: Promise<T>;
+  constructor() {
+    this.promise = new Promise<T>((res, rej) => {
+      this.resolve = res;
+      this.reject = rej;
+    });
+  }
 }
