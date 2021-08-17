@@ -1,10 +1,9 @@
+use crate::proto::api;
+use anyhow::anyhow;
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
 };
-use tonic::Status;
-
-use crate::proto::api;
 
 #[derive(Debug)]
 pub struct Config {
@@ -35,7 +34,7 @@ impl From<Config> for api::Config {
     }
 }
 impl TryFrom<api::Config> for Config {
-    type Error = Status;
+    type Error = anyhow::Error;
 
     fn try_from(value: api::Config) -> Result<Self, Self::Error> {
         let queries: Vec<QueryConfig> = value
@@ -65,17 +64,17 @@ impl From<QueryConfig> for api::QueryConfig {
     }
 }
 impl TryFrom<api::QueryConfig> for QueryConfig {
-    type Error = Status;
+    type Error = anyhow::Error;
 
     fn try_from(value: api::QueryConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             name: if value.name.is_empty() {
-                return Err(Status::invalid_argument("missing name"));
+                return Err(anyhow!("missing name"));
             } else {
                 value.name
             },
             sql_template: if value.sql_template.is_empty() {
-                return Err(Status::invalid_argument("missing sql_template"));
+                return Err(anyhow!("missing sql_template"));
             } else {
                 value.sql_template
             },
@@ -94,17 +93,17 @@ impl From<MutateConfig> for api::MutateConfig {
     }
 }
 impl TryFrom<api::MutateConfig> for MutateConfig {
-    type Error = Status;
+    type Error = anyhow::Error;
 
     fn try_from(value: api::MutateConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             name: if value.name.is_empty() {
-                return Err(Status::invalid_argument("missing name"));
+                return Err(anyhow!("missing name"));
             } else {
                 value.name
             },
             sql_template: if value.sql_template.is_empty() {
-                return Err(Status::invalid_argument("missing sql_template"));
+                return Err(anyhow!("missing sql_template"));
             } else {
                 value.sql_template
             },

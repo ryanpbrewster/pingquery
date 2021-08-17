@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1"
 actix= "0.12"
 actix-web = "4.0.0-beta.8"
 actix-web-actors = "4.0.0-beta.6"
@@ -20,14 +21,10 @@ rusqlite = { version = "0.25", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 structopt = "0.3"
-tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
-tokio-stream = "0.1"
-tonic = "0.5"
-tonic-reflection = "0.2"
+tokio = "1"
 
 [build-dependencies]
 prost-build = "0.8"
-tonic-build = "0.5"
 
 [[bin]]
 name = "noop"

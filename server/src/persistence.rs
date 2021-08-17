@@ -15,7 +15,7 @@ use rusqlite::{
     ToSql,
 };
 
-use tonic::Status;
+use anyhow::anyhow;
 
 pub struct Persistence {
     pub metadata: Pool<SqliteConnectionManager>,
@@ -24,7 +24,7 @@ pub struct Persistence {
 }
 
 impl Persistence {
-    pub async fn init(&self) -> Result<(), Status> {
+    pub async fn init(&self) -> anyhow::Result<()> {
         trace!("init");
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
@@ -32,12 +32,12 @@ impl Persistence {
         txn.commit().unwrap();
         Ok(())
     }
-    pub async fn diagnostics(&self) -> Result<DiagnosticsReport, Status> {
+    pub async fn diagnostics(&self) -> anyhow::Result<DiagnosticsReport> {
         trace!("diagnostics");
         Ok(self.diagnostics.report())
     }
 
-    pub fn get_config(&self) -> Result<Config, Status> {
+    pub fn get_config(&self) -> anyhow::Result<Config> {
         trace!("get_config");
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
@@ -50,7 +50,7 @@ impl Persistence {
         Ok(config)
     }
 
-    pub fn set_config(&self, config: Config) -> Result<(), Status> {
+    pub fn set_config(&self, config: Config) -> anyhow::Result<()> {
         trace!("set_config: {:?}", config);
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
@@ -60,13 +60,13 @@ impl Persistence {
         Ok(())
     }
 
-    pub fn exec(&self, request: ExecRequest) -> Result<ExecResponse, Status> {
+    pub fn exec(&self, request: ExecRequest) -> anyhow::Result<ExecResponse> {
         trace!("exec: {:?}", request);
         let raw_sql = request.raw_sql;
         let conn = self.data.get().unwrap();
         let mut stmt = conn
             .prepare(&raw_sql)
-            .map_err(|e| Status::invalid_argument(&format!("invalid sql: {}", e)))?;
+            .map_err(|e| anyhow!("invalid sql: {}", e))?;
         let rows: Vec<Row> = stmt
             .query_map([], |row| Ok(row_from_sql(row)))
             .unwrap()
@@ -82,7 +82,7 @@ impl Persistence {
         name: String,
         sql_template: &str,
         params: &Row,
-    ) -> Result<Vec<Row>, Status> {
+    ) -> anyhow::Result<Vec<Row>> {
         self.diagnostics
             .queries
             .entry(name)
@@ -176,10 +176,10 @@ fn do_stmt(
     txn: &rusqlite::Transaction,
     sql_template: &str,
     params: &Row,
-) -> Result<Vec<Row>, Status> {
+) -> anyhow::Result<Vec<Row>> {
     let mut stmt = txn
         .prepare(sql_template)
-        .map_err(|e| Status::invalid_argument(&format!("invalid sql: {}", e)))?;
+        .map_err(|e| anyhow!("invalid sql: {}", e))?;
     let params: Vec<(&str, &dyn ToSql)> = params
         .columns
         .iter()
@@ -187,9 +187,9 @@ fn do_stmt(
         .collect();
     let rows: Vec<Row> = stmt
         .query_map(params.as_slice(), |row| Ok(row_from_sql(row)))
-        .map_err(|e| Status::invalid_argument(&format!("failed to query: {}", e)))?
+        .map_err(|e| anyhow!("failed to query: {}", e))?
         .collect::<Result<_, _>>()
-        .map_err(|_| Status::invalid_argument("failed to collect rows"))?;
+        .map_err(|_| anyhow!("failed to collect rows"))?;
     Ok(rows)
 }
 

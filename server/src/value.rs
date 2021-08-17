@@ -3,8 +3,8 @@ use std::{
     convert::{TryFrom, TryInto},
 };
 
+use anyhow::anyhow;
 use rusqlite::types::{FromSql, FromSqlError};
-use tonic::Status;
 
 use crate::proto::api;
 
@@ -20,7 +20,7 @@ pub struct Row {
 }
 
 impl TryFrom<api::Value> for Value {
-    type Error = Status;
+    type Error = anyhow::Error;
 
     fn try_from(v: api::Value) -> Result<Self, Self::Error> {
         if !v.text.is_empty() {
@@ -46,7 +46,7 @@ impl From<Value> for api::Value {
 }
 
 impl TryFrom<rusqlite::types::Value> for Value {
-    type Error = Status;
+    type Error = anyhow::Error;
 
     fn try_from(v: rusqlite::types::Value) -> Result<Self, Self::Error> {
         match v {
@@ -54,9 +54,7 @@ impl TryFrom<rusqlite::types::Value> for Value {
             rusqlite::types::Value::Text(s) => Ok(Value::Text(s)),
             rusqlite::types::Value::Null
             | rusqlite::types::Value::Real(_)
-            | rusqlite::types::Value::Blob(_) => {
-                Err(Status::invalid_argument("unknown sqlite value"))
-            }
+            | rusqlite::types::Value::Blob(_) => Err(anyhow!("unknown sqlite value")),
         }
     }
 }
@@ -103,7 +101,7 @@ impl From<Row> for api::Row {
 }
 
 impl TryFrom<api::Row> for Row {
-    type Error = Status;
+    type Error = anyhow::Error;
 
     fn try_from(v: api::Row) -> Result<Self, Self::Error> {
         let columns: BTreeMap<String, Value> = v
@@ -113,7 +111,7 @@ impl TryFrom<api::Row> for Row {
                 let v: Value = v.try_into()?;
                 Ok((k, v))
             })
-            .collect::<Result<BTreeMap<String, Value>, Status>>()?;
+            .collect::<Result<BTreeMap<String, Value>, anyhow::Error>>()?;
         Ok(Row { columns })
     }
 }

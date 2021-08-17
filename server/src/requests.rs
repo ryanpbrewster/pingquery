@@ -1,8 +1,7 @@
 use std::convert::{TryFrom, TryInto};
 
-use tonic::Status;
-
 use crate::{proto::api, value::Row};
+use anyhow::anyhow;
 
 pub enum Interaction {
     Query { name: String, params: Row },
@@ -11,7 +10,7 @@ pub enum Interaction {
 }
 
 impl TryFrom<api::InteractRequest> for Interaction {
-    type Error = Status;
+    type Error = anyhow::Error;
 
     fn try_from(value: api::InteractRequest) -> Result<Self, Self::Error> {
         if let Some(stmt) = value.query {
@@ -32,6 +31,6 @@ impl TryFrom<api::InteractRequest> for Interaction {
                 params: stmt.params.unwrap_or_default().try_into()?,
             });
         }
-        Err(Status::invalid_argument("missing type for InteractRequest"))
+        Err(anyhow!("missing type for InteractRequest"))
     }
 }

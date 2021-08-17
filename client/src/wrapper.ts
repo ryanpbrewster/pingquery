@@ -5,11 +5,11 @@ import WebSocket from "ws";
 export default class Client {
   constructor(private readonly address: string) {}
   private async doGet<T>(path: string): Promise<T> {
-    console.log(`[GET] ${path}`);
+    // console.log(`[GET] ${path}`);
     return got.get(`http://${this.address}/${path}`).json();
   }
   private async doPost<T>(path: string, json: object): Promise<T> {
-    console.log(`[POST] ${path} -> ${JSON.stringify(json)}`);
+    // console.log(`[POST] ${path} -> ${JSON.stringify(json)}`);
     const resp = got.post(`http://${this.address}/${path}`, { json });
     return await resp.json();
   }
@@ -57,7 +57,7 @@ class InteractWrapper {
     });
     socket.on("message", (data) => {
       const msg = (data as Buffer).toString();
-      console.log("[RECV]", msg);
+      // console.log("[RECV]", msg);
       this.dataCb(
         interactResponseFromProto(
           api.InteractResponse.fromJSON(JSON.parse(msg))
@@ -65,7 +65,7 @@ class InteractWrapper {
       );
     });
     socket.on("error", (err) => {
-      console.error(err);
+      // console.error(err);
       this.errorCb(err);
     });
     socket.on("close", (reason) => {
@@ -78,7 +78,7 @@ class InteractWrapper {
       api.InteractRequest.toJSON(interactRequestToProto(req))
     );
     const socket = await this.socket.promise;
-    console.log(`[SEND] ${msg}`);
+    // console.log(`[SEND] ${msg}`);
     socket.send(msg);
   }
   async end(): Promise<void> {

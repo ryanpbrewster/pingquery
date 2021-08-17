@@ -1,23 +1,24 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc};
 
-use actix::{Actor, AsyncContext, Handler, StreamHandler, WrapFuture};
+use actix::{Actor, AsyncContext, Handler, StreamHandler};
 use actix_web::{
     middleware,
     web::{self, Data},
     App, Error, HttpRequest, HttpResponse, HttpServer,
 };
 
-use actix_web_actors::ws::{self, CloseReason};
+use actix_web_actors::ws;
 use log::{debug, info, warn};
-use pingquery::{actor::{ClientHandle, ClientMsg, ListenActor}, diagnostics::Diagnostics, persistence::Persistence, proto::api::{
-        DiagnosticsRequest, ExecRequest, InitializeRequest, InteractRequest, InteractResponse,
-        SetConfigRequest,
-    }, server::{PQResult, PingQueryService}};
+use pingquery::{
+    actor::{ClientHandle, ClientMsg, ListenActor},
+    diagnostics::Diagnostics,
+    persistence::Persistence,
+    proto::api::{ExecRequest, InitializeRequest, InteractRequest, SetConfigRequest},
+    server::{PQResult, PingQueryService},
+};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
-use tokio::sync::mpsc::{self, UnboundedReceiver};
-use tonic::Status;
 
 #[actix_web::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -100,9 +101,7 @@ async fn exec_handler(
     }
 }
 
-async fn diagnostics_handler(
-    service: web::Data<PingQueryService>,
-) -> HttpResponse {
+async fn diagnostics_handler(service: web::Data<PingQueryService>) -> HttpResponse {
     match service.get_ref().diagnostics().await {
         Ok(v) => HttpResponse::Ok().json(v),
         Err(e) => {
@@ -161,7 +160,7 @@ impl Actor for InteractSession {
     fn started(&mut self, ctx: &mut Self::Context) {
         self.client = Some(self.service.interact(ctx.address().recipient()));
     }
-    fn stopping(&mut  self, ctx: &mut Self::Context) -> actix::Running { 
+    fn stopping(&mut self, _ctx: &mut Self::Context) -> actix::Running {
         if let Some(client) = &self.client {
             client.sender.send(ClientMsg::End).unwrap();
         }
@@ -175,7 +174,7 @@ impl Handler<PQResult> for InteractSession {
     fn handle(&mut self, msg: PQResult, ctx: &mut Self::Context) -> Self::Result {
         match msg.0 {
             Ok(v) => ctx.text(serde_json::to_string(&v).unwrap()),
-            Err(e) => ctx.close(None)
+            Err(_e) => ctx.close(None),
         }
     }
 }
@@ -196,7 +195,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for InteractSession {
                     }
                 };
                 info!("[WS] req: {:?}", req);
-                self.client.as_ref().unwrap().sender.send(ClientMsg::User(req)).unwrap();
+                self.client
+                    .as_ref()
+                    .unwrap()
+                    .sender
+                    .send(ClientMsg::User(req))
+                    .unwrap();
             }
             Ok(ws::Message::Close(r)) => {
                 ctx.close(r);
@@ -205,7 +209,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for InteractSession {
                 warn!("[WS] closing because of {}", e);
                 ctx.close(None);
             }
-            Ok(_) => {},
+            Ok(_) => {}
         }
     }
 }
