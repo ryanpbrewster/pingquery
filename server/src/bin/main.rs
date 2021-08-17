@@ -1,11 +1,19 @@
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::{path::PathBuf, sync::Arc};
 
-use actix::{Actor, StreamHandler};
-use actix_web::{App, Error, HttpRequest, HttpResponse, HttpServer, middleware, web::{self, Data}};
-use actix_web_actors::ws;
+use actix_web::{
+    middleware,
+    web::{self, Data},
+    App, HttpResponse, HttpServer,
+};
 
 use log::info;
-use pingquery::{actor::ListenActor, diagnostics::Diagnostics, persistence::Persistence, proto::api::{DiagnosticsRequest, ExecRequest, ExecResponse, InitializeRequest, InitializeResponse}, server::PingQueryService};
+use pingquery::{
+    actor::ListenActor,
+    diagnostics::Diagnostics,
+    persistence::Persistence,
+    proto::api::{DiagnosticsRequest, ExecRequest, InitializeRequest, SetConfigRequest},
+    server::PingQueryService,
+};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
@@ -30,9 +38,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         App::new()
             // enable logger
             .wrap(middleware::Logger::default())
-            .service(web::resource("/diagnostics").app_data(Data::new(service.clone())).route(web::post().to(diagnostics_handler)))
-            .service(web::resource("/exec").app_data(Data::new(service.clone())).route(web::post().to(exec_handler)))
-            .service(web::resource("/initialize").app_data(Data::new(service.clone())).route(web::post().to(initialize_handler)))
+            .service(
+                web::resource("/diagnostics")
+                    .app_data(Data::new(service.clone()))
+                    .route(web::post().to(diagnostics_handler)),
+            )
+            .service(
+                web::resource("/exec")
+                    .app_data(Data::new(service.clone()))
+                    .route(web::post().to(exec_handler)),
+            )
+            .service(
+                web::resource("/initialize")
+                    .app_data(Data::new(service.clone()))
+                    .route(web::post().to(initialize_handler)),
+            )
+            .service(
+                web::resource("/config")
+                    .app_data(Data::new(service.clone()))
+                    .route(web::get().to(get_config_handler))
+                    .route(web::post().to(set_config_handler)),
+            )
             .default_service(web::route().to(p404))
     })
     .bind(addr)?
@@ -42,22 +68,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn initialize_handler(service: web::Data<PingQueryService>, request: web::Json<InitializeRequest>) -> HttpResponse {
+async fn initialize_handler(
+    service: web::Data<PingQueryService>,
+    request: web::Json<InitializeRequest>,
+) -> HttpResponse {
     match service.get_ref().initialize(request.into_inner()).await {
         Ok(v) => HttpResponse::Ok().json(v),
         Err(e) => HttpResponse::BadRequest().body(e.to_string()),
     }
 }
 
-async fn exec_handler(service: web::Data<PingQueryService>, request: web::Json<ExecRequest>) -> HttpResponse {
+async fn exec_handler(
+    service: web::Data<PingQueryService>,
+    request: web::Json<ExecRequest>,
+) -> HttpResponse {
     match service.get_ref().exec(request.into_inner()).await {
         Ok(v) => HttpResponse::Ok().json(v),
         Err(e) => HttpResponse::BadRequest().body(e.to_string()),
     }
 }
 
-async fn diagnostics_handler(service: web::Data<PingQueryService>, request: web::Json<DiagnosticsRequest>) -> HttpResponse {
+async fn diagnostics_handler(
+    service: web::Data<PingQueryService>,
+    request: web::Json<DiagnosticsRequest>,
+) -> HttpResponse {
     match service.get_ref().diagnostics(request.into_inner()).await {
+        Ok(v) => HttpResponse::Ok().json(v),
+        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+    }
+}
+
+async fn get_config_handler(service: web::Data<PingQueryService>) -> HttpResponse {
+    match service.get_ref().get_config().await {
+        Ok(v) => HttpResponse::Ok().json(v),
+        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+    }
+}
+
+async fn set_config_handler(
+    service: web::Data<PingQueryService>,
+    request: web::Json<SetConfigRequest>,
+) -> HttpResponse {
+    match service.get_ref().set_config(request.into_inner()).await {
         Ok(v) => HttpResponse::Ok().json(v),
         Err(e) => HttpResponse::BadRequest().body(e.to_string()),
     }

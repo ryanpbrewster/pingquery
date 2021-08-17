@@ -5,9 +5,9 @@ use crate::{
     config::Config,
     persistence::Persistence,
     proto::api::{
-        DiagnosticsRequest, DiagnosticsResponse, ExecRequest,
-        ExecResponse, GetConfigRequest, GetConfigResponse, InitializeRequest, InitializeResponse,
-        InteractRequest, InteractResponse, SetConfigRequest, SetConfigResponse,
+        DiagnosticsRequest, DiagnosticsResponse, ExecRequest, ExecResponse, GetConfigResponse,
+        InitializeRequest, InitializeResponse, InteractRequest, InteractResponse, SetConfigRequest,
+        SetConfigResponse,
     },
 };
 
@@ -35,27 +35,20 @@ impl PingQueryService {
         let report = self.persistence.diagnostics().await?;
         Ok(report.into())
     }
-    pub async fn get_config(
-        &self,
-        _request: Request<GetConfigRequest>,
-    ) -> Result<Response<GetConfigResponse>, Status> {
+    pub async fn get_config(&self) -> Result<GetConfigResponse, Status> {
         let config = self.persistence.get_config()?;
-        Ok(Response::new(GetConfigResponse {
+        Ok(GetConfigResponse {
             config: Some(config.into()),
-        }))
+        })
     }
 
-    pub async fn set_config(
-        &self,
-        request: Request<SetConfigRequest>,
-    ) -> Result<Response<SetConfigResponse>, Status> {
+    pub async fn set_config(&self, request: SetConfigRequest) -> Result<SetConfigResponse, Status> {
         let config: Config = request
-            .into_inner()
             .config
             .ok_or_else(|| Status::invalid_argument("missing config"))?
             .try_into()?;
         self.persistence.set_config(config)?;
-        Ok(Response::new(SetConfigResponse::default()))
+        Ok(SetConfigResponse::default())
     }
 
     pub async fn exec(&self, request: ExecRequest) -> Result<ExecResponse, Status> {
