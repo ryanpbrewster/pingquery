@@ -15,7 +15,7 @@ use rusqlite::{
     ToSql,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 
 pub struct Persistence {
     pub metadata: Pool<SqliteConnectionManager>,
@@ -24,7 +24,7 @@ pub struct Persistence {
 }
 
 impl Persistence {
-    pub async fn init(&self) -> anyhow::Result<()> {
+    pub async fn init(&self) -> Result<()> {
         trace!("init");
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
@@ -32,12 +32,12 @@ impl Persistence {
         txn.commit().unwrap();
         Ok(())
     }
-    pub async fn diagnostics(&self) -> anyhow::Result<DiagnosticsReport> {
+    pub async fn diagnostics(&self) -> Result<DiagnosticsReport> {
         trace!("diagnostics");
         Ok(self.diagnostics.report())
     }
 
-    pub fn get_config(&self) -> anyhow::Result<Config> {
+    pub fn get_config(&self) -> Result<Config> {
         trace!("get_config");
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
@@ -50,7 +50,7 @@ impl Persistence {
         Ok(config)
     }
 
-    pub fn set_config(&self, config: Config) -> anyhow::Result<()> {
+    pub fn set_config(&self, config: Config) -> Result<()> {
         trace!("set_config: {:?}", config);
         let mut conn = self.metadata.get().unwrap();
         let txn = conn.transaction().unwrap();
@@ -60,7 +60,7 @@ impl Persistence {
         Ok(())
     }
 
-    pub fn exec(&self, request: ExecRequest) -> anyhow::Result<ExecResponse> {
+    pub fn exec(&self, request: ExecRequest) -> Result<ExecResponse> {
         trace!("exec: {:?}", request);
         let raw_sql = request.raw_sql;
         let conn = self.data.get().unwrap();
@@ -77,12 +77,7 @@ impl Persistence {
         })
     }
 
-    pub fn do_query(
-        &self,
-        name: String,
-        sql_template: &str,
-        params: &Row,
-    ) -> anyhow::Result<Vec<Row>> {
+    pub fn do_query(&self, name: String, sql_template: &str, params: &Row) -> Result<Vec<Row>> {
         self.diagnostics
             .queries
             .entry(name)
@@ -172,11 +167,7 @@ fn read_config(txn: &rusqlite::Transaction) -> (Vec<QueryConfig>, Vec<MutateConf
     (queries, mutates)
 }
 
-fn do_stmt(
-    txn: &rusqlite::Transaction,
-    sql_template: &str,
-    params: &Row,
-) -> anyhow::Result<Vec<Row>> {
+fn do_stmt(txn: &rusqlite::Transaction, sql_template: &str, params: &Row) -> Result<Vec<Row>> {
     let mut stmt = txn
         .prepare(sql_template)
         .map_err(|e| anyhow!("invalid sql: {}", e))?;

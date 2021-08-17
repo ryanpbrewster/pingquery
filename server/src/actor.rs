@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use std::{
     collections::BTreeMap,
     convert::TryInto,
@@ -72,7 +72,7 @@ impl ClientActor {
             .fetch_sub(1, Ordering::SeqCst);
     }
 
-    fn handle_user(&mut self, req: api::InteractRequest) -> anyhow::Result<api::InteractResponse> {
+    fn handle_user(&mut self, req: api::InteractRequest) -> Result<api::InteractResponse> {
         let id = req.id;
         let req: Interaction = req.try_into()?;
         let rows = match req {
@@ -137,7 +137,7 @@ impl ClientActor {
         id: i32,
         name: String,
         params: Row,
-    ) -> anyhow::Result<api::InteractResponse> {
+    ) -> Result<api::InteractResponse> {
         let config = self.persistence.get_config()?;
         let query = config
             .queries

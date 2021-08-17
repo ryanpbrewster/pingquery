@@ -9,7 +9,7 @@ use crate::{
         InitializeResponse, InteractResponse, SetConfigRequest, SetConfigResponse,
     },
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 
 use actix::{Message, Recipient};
 
@@ -20,25 +20,22 @@ pub struct PingQueryService {
 }
 
 impl PingQueryService {
-    pub async fn initialize(
-        &self,
-        _request: InitializeRequest,
-    ) -> anyhow::Result<InitializeResponse> {
+    pub async fn initialize(&self, _request: InitializeRequest) -> Result<InitializeResponse> {
         self.persistence.init().await?;
         Ok(InitializeResponse::default())
     }
-    pub async fn diagnostics(&self) -> anyhow::Result<DiagnosticsResponse> {
+    pub async fn diagnostics(&self) -> Result<DiagnosticsResponse> {
         let report = self.persistence.diagnostics().await?;
         Ok(report.into())
     }
-    pub async fn get_config(&self) -> anyhow::Result<GetConfigResponse> {
+    pub async fn get_config(&self) -> Result<GetConfigResponse> {
         let config = self.persistence.get_config()?;
         Ok(GetConfigResponse {
             config: Some(config.into()),
         })
     }
 
-    pub async fn set_config(&self, request: SetConfigRequest) -> anyhow::Result<SetConfigResponse> {
+    pub async fn set_config(&self, request: SetConfigRequest) -> Result<SetConfigResponse> {
         let config: Config = request
             .config
             .ok_or_else(|| anyhow!("missing config"))?
@@ -47,7 +44,7 @@ impl PingQueryService {
         Ok(SetConfigResponse::default())
     }
 
-    pub async fn exec(&self, request: ExecRequest) -> anyhow::Result<ExecResponse> {
+    pub async fn exec(&self, request: ExecRequest) -> Result<ExecResponse> {
         self.persistence.exec(request)
     }
 
@@ -58,7 +55,7 @@ impl PingQueryService {
     }
 }
 
-pub struct PQResult(pub anyhow::Result<InteractResponse>);
+pub struct PQResult(pub Result<InteractResponse>);
 impl Message for PQResult {
     type Result = ();
 }
