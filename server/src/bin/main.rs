@@ -162,7 +162,7 @@ impl Actor for InteractSession {
     }
     fn stopping(&mut self, _ctx: &mut Self::Context) -> actix::Running {
         if let Some(client) = &self.client {
-            client.sender.send(ClientMsg::End).unwrap();
+            let _ = client.sender.send(ClientMsg::End);
         }
         actix::Running::Stop
     }

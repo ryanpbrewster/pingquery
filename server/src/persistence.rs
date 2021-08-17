@@ -26,10 +26,10 @@ pub struct Persistence {
 impl Persistence {
     pub async fn init(&self) -> Result<()> {
         trace!("init");
-        let mut conn = self.metadata.get().unwrap();
-        let txn = conn.transaction().unwrap();
-        init_tables(&txn);
-        txn.commit().unwrap();
+        let mut conn = self.metadata.get()?;
+        let txn = conn.transaction()?;
+        init_tables(&txn)?;
+        txn.commit()?;
         Ok(())
     }
     pub async fn diagnostics(&self) -> Result<DiagnosticsReport> {
@@ -39,10 +39,10 @@ impl Persistence {
 
     pub fn get_config(&self) -> Result<Config> {
         trace!("get_config");
-        let mut conn = self.metadata.get().unwrap();
-        let txn = conn.transaction().unwrap();
-        let (queries, mutates) = read_config(&txn);
-        txn.commit().unwrap();
+        let mut conn = self.metadata.get()?;
+        let txn = conn.transaction()?;
+        let (queries, mutates) = read_config(&txn)?;
+        txn.commit()?;
         let config = Config {
             queries: queries.into_iter().map(|c| (c.name.clone(), c)).collect(),
             mutates: mutates.into_iter().map(|c| (c.name.clone(), c)).collect(),
@@ -52,26 +52,24 @@ impl Persistence {
 
     pub fn set_config(&self, config: Config) -> Result<()> {
         trace!("set_config: {:?}", config);
-        let mut conn = self.metadata.get().unwrap();
-        let txn = conn.transaction().unwrap();
-        clear_tables(&txn);
-        write_tables(&txn, &config);
-        txn.commit().unwrap();
+        let mut conn = self.metadata.get()?;
+        let txn = conn.transaction()?;
+        clear_tables(&txn)?;
+        write_tables(&txn, &config)?;
+        txn.commit()?;
         Ok(())
     }
 
     pub fn exec(&self, request: ExecRequest) -> Result<ExecResponse> {
         trace!("exec: {:?}", request);
         let raw_sql = request.raw_sql;
-        let conn = self.data.get().unwrap();
+        let conn = self.data.get()?;
         let mut stmt = conn
             .prepare(&raw_sql)
             .map_err(|e| anyhow!("invalid sql: {}", e))?;
         let rows: Vec<Row> = stmt
-            .query_map([], |row| Ok(row_from_sql(row)))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
+            .query_map([], |row| Ok(row_from_sql(row)))?
+            .collect::<Result<_, _>>()?;
         Ok(ExecResponse {
             rows: rows.into_iter().map(|r| r.into()).collect(),
         })
@@ -84,15 +82,15 @@ impl Persistence {
             .or_default()
             .num_executions
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let mut conn = self.data.get().unwrap();
-        let txn = conn.transaction().unwrap();
+        let mut conn = self.data.get()?;
+        let txn = conn.transaction()?;
         let rows = do_stmt(&txn, &sql_template, params)?;
-        txn.commit().unwrap();
+        txn.commit()?;
         Ok(rows)
     }
 }
 
-fn init_tables(txn: &rusqlite::Transaction) {
+fn init_tables(txn: &rusqlite::Transaction) -> Result<()> {
     txn.execute(
         r#"
         CREATE TABLE IF NOT EXISTS queries (
@@ -102,8 +100,7 @@ fn init_tables(txn: &rusqlite::Transaction) {
         )
     "#,
         [],
-    )
-    .unwrap();
+    )?;
     txn.execute(
         r#"
         CREATE TABLE IF NOT EXISTS mutates (
@@ -113,58 +110,54 @@ fn init_tables(txn: &rusqlite::Transaction) {
         )
     "#,
         [],
-    )
-    .unwrap();
+    )?;
+    Ok(())
 }
 
-fn clear_tables(txn: &rusqlite::Transaction) {
-    txn.execute("DELETE FROM queries", []).unwrap();
-    txn.execute("DELETE FROM mutates", []).unwrap();
+fn clear_tables(txn: &rusqlite::Transaction) -> Result<()> {
+    txn.execute("DELETE FROM queries", [])?;
+    txn.execute("DELETE FROM mutates", [])?;
+    Ok(())
 }
 
-fn write_tables(txn: &rusqlite::Transaction, config: &Config) {
-    let mut qstmt = txn
-        .prepare("INSERT INTO queries (name, sql_template, listen) VALUES (?, ?, ?)")
-        .unwrap();
+fn write_tables(txn: &rusqlite::Transaction, config: &Config) -> Result<()> {
+    let mut qstmt =
+        txn.prepare("INSERT INTO queries (name, sql_template, listen) VALUES (?, ?, ?)")?;
     for query in config.queries.values() {
-        qstmt
-            .execute(&[
-                &query.name,
-                &query.sql_template,
-                &encode_strings(&query.listen),
-            ])
-            .unwrap();
+        qstmt.execute(&[
+            &query.name,
+            &query.sql_template,
+            &encode_strings(&query.listen),
+        ])?;
     }
-    let mut mstmt = txn
-        .prepare("INSERT INTO mutates (name, sql_template, notify) VALUES (?, ?, ?)")
-        .unwrap();
+    let mut mstmt =
+        txn.prepare("INSERT INTO mutates (name, sql_template, notify) VALUES (?, ?, ?)")?;
     for mutate in config.mutates.values() {
-        mstmt
-            .execute([
-                &mutate.name,
-                &mutate.sql_template,
-                &encode_strings(&mutate.notify),
-            ])
-            .unwrap();
+        mstmt.execute([
+            &mutate.name,
+            &mutate.sql_template,
+            &encode_strings(&mutate.notify),
+        ])?;
     }
+    Ok(())
 }
 
-fn read_config(txn: &rusqlite::Transaction) -> (Vec<QueryConfig>, Vec<MutateConfig>) {
+fn read_config(txn: &rusqlite::Transaction) -> Result<(Vec<QueryConfig>, Vec<MutateConfig>)> {
     let queries: Vec<QueryConfig> = {
-        let mut stmt = txn.prepare("SELECT * FROM queries").unwrap();
-        stmt.query_map([], |row| Ok(query_from_sql(row)))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap()
+        let mut stmt = txn.prepare("SELECT * FROM queries")?;
+        let rows = stmt
+            .query_map([], |row| Ok(query_from_sql(row)))?
+            .collect::<Result<_, _>>()?;
+        rows
     };
     let mutates: Vec<MutateConfig> = {
-        let mut stmt = txn.prepare("SELECT * FROM mutates").unwrap();
-        stmt.query_map([], |row| Ok(mutate_from_sql(row)))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap()
+        let mut stmt = txn.prepare("SELECT * FROM mutates")?;
+        let rows = stmt
+            .query_map([], |row| Ok(mutate_from_sql(row)))?
+            .collect::<Result<_, _>>()?;
+        rows
     };
-    (queries, mutates)
+    Ok((queries, mutates))
 }
 
 fn do_stmt(txn: &rusqlite::Transaction, sql_template: &str, params: &Row) -> Result<Vec<Row>> {
