@@ -1,22 +1,16 @@
 use std::{path::PathBuf, sync::Arc};
 
-use actix_web::{
-    middleware,
-    web::{self, Data},
-    App, HttpResponse, HttpServer,
-};
+use actix::{Actor, AsyncContext, StreamHandler, WrapFuture};
+use actix_web::{App, Error, HttpRequest, HttpResponse, HttpServer, middleware, web::{self, Data}};
 
-use log::info;
-use pingquery::{
-    actor::ListenActor,
-    diagnostics::Diagnostics,
-    persistence::Persistence,
-    proto::api::{DiagnosticsRequest, ExecRequest, InitializeRequest, SetConfigRequest},
-    server::PingQueryService,
-};
+use actix_web_actors::ws;
+use log::{debug, info};
+use pingquery::{actor::{ClientHandle, ListenActor}, diagnostics::Diagnostics, persistence::Persistence, proto::api::{DiagnosticsRequest, ExecRequest, InitializeRequest, InteractResponse, SetConfigRequest}, server::PingQueryService};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tonic::Status;
 
 #[actix_web::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -59,6 +53,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .route(web::get().to(get_config_handler))
                     .route(web::post().to(set_config_handler)),
             )
+            .service(
+                web::resource("/interact")
+                    .app_data(Data::new(service.clone()))
+                    .route(web::get().to(interact_handler)),
+            )
             .default_service(web::route().to(p404))
     })
     .bind(addr)?
@@ -74,7 +73,10 @@ async fn initialize_handler(
 ) -> HttpResponse {
     match service.get_ref().initialize(request.into_inner()).await {
         Ok(v) => HttpResponse::Ok().json(v),
-        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+        Err(e) => {
+            debug!("error: {:?}", e);
+            HttpResponse::BadRequest().body(e.to_string())
+        }
     }
 }
 
@@ -84,7 +86,10 @@ async fn exec_handler(
 ) -> HttpResponse {
     match service.get_ref().exec(request.into_inner()).await {
         Ok(v) => HttpResponse::Ok().json(v),
-        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+        Err(e) => {
+            debug!("error: {:?}", e);
+            HttpResponse::BadRequest().body(e.to_string())
+        }
     }
 }
 
@@ -94,14 +99,20 @@ async fn diagnostics_handler(
 ) -> HttpResponse {
     match service.get_ref().diagnostics(request.into_inner()).await {
         Ok(v) => HttpResponse::Ok().json(v),
-        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+        Err(e) => {
+            debug!("error: {:?}", e);
+            HttpResponse::BadRequest().body(e.to_string())
+        }
     }
 }
 
 async fn get_config_handler(service: web::Data<PingQueryService>) -> HttpResponse {
     match service.get_ref().get_config().await {
         Ok(v) => HttpResponse::Ok().json(v),
-        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+        Err(e) => {
+            debug!("error: {:?}", e);
+            HttpResponse::BadRequest().body(e.to_string())
+        }
     }
 }
 
@@ -109,9 +120,54 @@ async fn set_config_handler(
     service: web::Data<PingQueryService>,
     request: web::Json<SetConfigRequest>,
 ) -> HttpResponse {
-    match service.get_ref().set_config(request.into_inner()).await {
+    let request = request.into_inner();
+    debug!("set config: {:?}", request);
+    match service.get_ref().set_config(request).await {
         Ok(v) => HttpResponse::Ok().json(v),
-        Err(e) => HttpResponse::BadRequest().body(e.to_string()),
+        Err(e) => {
+            debug!("error: {:?}", e);
+            HttpResponse::BadRequest().body(e.to_string())
+        }
+    }
+}
+
+async fn interact_handler(
+    service: web::Data<PingQueryService>,
+    r: HttpRequest,
+    stream: web::Payload,
+) -> Result<HttpResponse, Error> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let handle = service.get_ref().interact(tx);
+    let session = InteractSession {
+        outputs: rx,
+        client: handle,
+    };
+    ws::start(session, &r, stream)
+}
+
+
+struct InteractSession {
+    outputs: UnboundedReceiver<Result<InteractResponse, Status>>,
+    client: ClientHandle,
+}
+
+impl Actor for InteractSession {
+    type Context = ws::WebsocketContext<Self>;
+}
+
+/// Handler for ws::Message message
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for InteractSession {
+    fn handle(
+        &mut self,
+        msg: Result<ws::Message, ws::ProtocolError>,
+        ctx: &mut Self::Context,
+    ) {
+        info!("[WS] incoming: {:?}", msg);
+        match msg {
+            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Text(text)) => ctx.text(text),
+            _ => (),
+        }
     }
 }
 

@@ -1,16 +1,16 @@
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitializeRequest {
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitializeResponse {
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DiagnosticsRequest {
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DiagnosticsResponse {
     #[prost(int32, tag="1")]
@@ -18,7 +18,7 @@ pub struct DiagnosticsResponse {
     #[prost(message, repeated, tag="2")]
     pub queries: ::prost::alloc::vec::Vec<QueryDiagnostics>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryDiagnostics {
     #[prost(string, tag="1")]
@@ -26,39 +26,39 @@ pub struct QueryDiagnostics {
     #[prost(int64, tag="2")]
     pub num_executions: i64,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetConfigRequest {
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetConfigResponse {
     #[prost(message, optional, tag="1")]
     pub config: ::core::option::Option<Config>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetConfigRequest {
     #[prost(message, optional, tag="1")]
     pub config: ::core::option::Option<Config>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetConfigResponse {
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecRequest {
     #[prost(string, tag="1")]
     pub raw_sql: ::prost::alloc::string::String,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecResponse {
     #[prost(message, repeated, tag="1")]
     pub rows: ::prost::alloc::vec::Vec<Row>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InteractRequest {
     //// An identifier that the server will echo back with any response related to this request.
@@ -70,7 +70,7 @@ pub struct InteractRequest {
 }
 /// Nested message and enum types in `InteractRequest`.
 pub mod interact_request {
-    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Type {
         #[prost(message, tag="2")]
@@ -81,7 +81,7 @@ pub mod interact_request {
         Listen(super::Statement),
     }
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InteractResponse {
     //// The identifier of the request that generated this response.
@@ -90,7 +90,7 @@ pub struct InteractResponse {
     #[prost(message, repeated, tag="2")]
     pub rows: ::prost::alloc::vec::Vec<Row>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Config {
     #[prost(message, repeated, tag="1")]
@@ -98,7 +98,7 @@ pub struct Config {
     #[prost(message, repeated, tag="2")]
     pub mutates: ::prost::alloc::vec::Vec<MutateConfig>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryConfig {
     #[prost(string, tag="1")]
@@ -108,7 +108,7 @@ pub struct QueryConfig {
     #[prost(string, repeated, tag="3")]
     pub listen: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MutateConfig {
     #[prost(string, tag="1")]
@@ -118,7 +118,7 @@ pub struct MutateConfig {
     #[prost(string, repeated, tag="3")]
     pub notify: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Statement {
     #[prost(string, tag="1")]
@@ -126,7 +126,7 @@ pub struct Statement {
     #[prost(message, optional, tag="2")]
     pub params: ::core::option::Option<Row>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Value {
     #[prost(oneof="value::Type", tags="1, 2")]
@@ -134,7 +134,7 @@ pub struct Value {
 }
 /// Nested message and enum types in `Value`.
 pub mod value {
-    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Type {
         #[prost(int64, tag="1")]
@@ -143,7 +143,7 @@ pub mod value {
         Text(::prost::alloc::string::String),
     }
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Row {
     #[prost(map="string, message", tag="1")]

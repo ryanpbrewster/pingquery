@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 actix= "0.12"
 actix-web = "4.0.0-beta.8"
-actix-web-actors = "3"
+actix-web-actors = "4.0.0-beta.6"
 dashmap = "4"
 env_logger = "0.8"
 log = "0.4"

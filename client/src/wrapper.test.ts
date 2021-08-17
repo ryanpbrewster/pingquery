@@ -1,6 +1,6 @@
 import Client, { Config, InteractResponse } from "./wrapper";
 
-const client = new Client("localhost:50051");
+const client = new Client("localhost:8080");
 const CONFIG: Config = {
   queries: [
     {
