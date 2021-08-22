@@ -9,13 +9,20 @@ use actix_web::{
 
 use actix_web_actors::ws;
 use log::{debug, info, warn};
-use pingquery::{actor::{ClientActor, ClientMsg, ListenActor}, diagnostics::Diagnostics, persistence::Persistence, proto::api::{ExecRequest, InitializeRequest, InteractRequest, SetConfigRequest}, server::{PQResult, PingQueryService}};
+use pingquery::{
+    actor::{ClientActor, ClientMsg, ListenActor},
+    diagnostics::Diagnostics,
+    persistence::Persistence,
+    proto::api::{ExecRequest, InitializeRequest, InteractRequest, SetConfigRequest},
+    server::{PQResult, PingQueryService},
+};
+use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
 
 #[actix_web::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
     let flags = CliFlags::from_args();
 
@@ -139,8 +146,7 @@ async fn interact_handler(
         service: service.into_inner(),
         client: None,
     };
-    let (_addr, resp) = ws::start_with_addr(session, &r, stream)?;
-    Ok(resp)
+    ws::start(session, &r, stream)
 }
 
 struct InteractSession {
@@ -164,8 +170,7 @@ impl Actor for InteractSession {
 
 impl Handler<PQResult> for InteractSession {
     type Result = ();
-
-    fn handle(&mut self, msg: PQResult, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: PQResult, ctx: &mut Self::Context) {
         match msg.0 {
             Ok(v) => ctx.text(serde_json::to_string(&v).unwrap()),
             Err(_e) => ctx.close(None),
@@ -219,10 +224,11 @@ struct CliFlags {
     metadata: Option<PathBuf>,
 }
 
-fn sqlite(path: Option<PathBuf>) -> Result<r2d2::Pool<SqliteConnectionManager>, r2d2::Error> {
+fn sqlite(path: Option<PathBuf>) -> anyhow::Result<Pool<SqliteConnectionManager>> {
     let manager = match path {
         None => SqliteConnectionManager::memory(),
         Some(path) => SqliteConnectionManager::file(path),
     };
-    r2d2::Pool::new(manager)
+    let pool = Pool::new(manager)?;
+    Ok(pool)
 }

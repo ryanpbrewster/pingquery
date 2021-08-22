@@ -1,9 +1,14 @@
 use std::{convert::TryInto, sync::Arc};
 
-use crate::{actor::{ClientActor, ListenActor}, config::Config, persistence::Persistence, proto::api::{
+use crate::{
+    actor::{ClientActor, ListenActor},
+    config::Config,
+    persistence::Persistence,
+    proto::api::{
         DiagnosticsResponse, ExecRequest, ExecResponse, GetConfigResponse, InitializeRequest,
         InitializeResponse, InteractResponse, SetConfigRequest, SetConfigResponse,
-    }};
+    },
+};
 use anyhow::{anyhow, Result};
 
 use actix::{Addr, Message, Recipient};

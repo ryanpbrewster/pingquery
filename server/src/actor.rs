@@ -5,11 +5,11 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Recipient};
-use log::trace;
 use crate::{
     persistence::Persistence, proto::api, requests::Interaction, server::PQResult, value::Row,
 };
+use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Recipient};
+use log::trace;
 
 #[derive(Debug)]
 pub enum ClientMsg {
@@ -61,7 +61,11 @@ impl Handler<ClientMsg> for ClientActor {
     }
 }
 impl ClientActor {
-    fn handle_user(&mut self, req: api::InteractRequest, addr: Addr<ClientActor>) -> Result<api::InteractResponse> {
+    fn handle_user(
+        &mut self,
+        req: api::InteractRequest,
+        addr: Addr<ClientActor>,
+    ) -> Result<api::InteractResponse> {
         let id = req.id;
         let req: Interaction = req.try_into()?;
         let rows = match req {
@@ -87,7 +91,8 @@ impl ClientActor {
                     self.listener
                         .try_send(ListenMsg::Ping {
                             paths: mutate.notify.clone(),
-                        }).unwrap();
+                        })
+                        .unwrap();
                 }
                 rows
             }
@@ -173,17 +178,17 @@ impl Handler<ListenMsg> for ListenActor {
     type Result = ();
 
     fn handle(&mut self, msg: ListenMsg, _ctx: &mut Self::Context) -> Self::Result {
-            trace!("[LISTEN] recv {:?}", msg);
-            match msg {
-                ListenMsg::Register {
-                    paths,
-                    addr,
-                    id,
-                    name,
-                    params,
-                } => self.handle_register(paths, addr, id, name, params),
-                ListenMsg::Ping { paths } => self.handle_ping(paths),
-            }
+        trace!("[LISTEN] recv {:?}", msg);
+        match msg {
+            ListenMsg::Register {
+                paths,
+                addr,
+                id,
+                name,
+                params,
+            } => self.handle_register(paths, addr, id, name, params),
+            ListenMsg::Ping { paths } => self.handle_ping(paths),
+        }
     }
 }
 
