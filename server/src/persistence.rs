@@ -17,6 +17,7 @@ use rusqlite::{
 
 use anyhow::{anyhow, Result};
 
+#[derive(Debug)]
 pub struct Persistence {
     pub metadata: Pool<SqliteConnectionManager>,
     pub data: Pool<SqliteConnectionManager>,

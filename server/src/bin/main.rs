@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use actix::{Actor, AsyncContext, Handler, StreamHandler};
+use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
 use actix_web::{
     middleware,
     web::{self, Data},
@@ -9,13 +9,7 @@ use actix_web::{
 
 use actix_web_actors::ws;
 use log::{debug, info, warn};
-use pingquery::{
-    actor::{ClientHandle, ClientMsg, ListenActor},
-    diagnostics::Diagnostics,
-    persistence::Persistence,
-    proto::api::{ExecRequest, InitializeRequest, InteractRequest, SetConfigRequest},
-    server::{PQResult, PingQueryService},
-};
+use pingquery::{actor::{ClientActor, ClientMsg, ListenActor}, diagnostics::Diagnostics, persistence::Persistence, proto::api::{ExecRequest, InitializeRequest, InteractRequest, SetConfigRequest}, server::{PQResult, PingQueryService}};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use structopt::StructOpt;
@@ -32,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let service = PingQueryService {
         persistence: Arc::new(persistence),
-        listener: ListenActor::start(),
+        listener: ListenActor::default().start(),
     };
     let addr = "[::]:8080";
     info!("listening @ {}", addr);
@@ -151,18 +145,18 @@ async fn interact_handler(
 
 struct InteractSession {
     service: Arc<PingQueryService>,
-    client: Option<ClientHandle>,
+    client: Option<Addr<ClientActor>>,
 }
 
 impl Actor for InteractSession {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        self.client = Some(self.service.interact(ctx.address().recipient()));
+        self.client = Some(self.service.interact(ctx.address().recipient()).start());
     }
     fn stopping(&mut self, _ctx: &mut Self::Context) -> actix::Running {
         if let Some(client) = &self.client {
-            let _ = client.sender.send(ClientMsg::End);
+            let _ = client.try_send(ClientMsg::End);
         }
         actix::Running::Stop
     }
@@ -198,8 +192,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for InteractSession {
                 self.client
                     .as_ref()
                     .unwrap()
-                    .sender
-                    .send(ClientMsg::User(req))
+                    .try_send(ClientMsg::User(req))
                     .unwrap();
             }
             Ok(ws::Message::Close(r)) => {

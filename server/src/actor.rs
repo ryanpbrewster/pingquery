@@ -5,10 +5,8 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use actix::Recipient;
+use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Recipient};
 use log::trace;
-use tokio::sync::mpsc;
-
 use crate::{
     persistence::Persistence, proto::api, requests::Interaction, server::PQResult, value::Row,
 };
@@ -19,60 +17,51 @@ pub enum ClientMsg {
     Requery { id: i32, name: String, params: Row },
     End,
 }
+impl Message for ClientMsg {
+    type Result = ();
+}
+
 #[derive(Clone, Debug)]
-pub struct ClientHandle {
-    pub sender: mpsc::UnboundedSender<ClientMsg>,
-}
 pub struct ClientActor {
-    handle: ClientHandle,
-    inputs: mpsc::UnboundedReceiver<ClientMsg>,
-    addr: Recipient<PQResult>,
-    persistence: Arc<Persistence>,
-    listener: ListenHandle,
+    pub addr: Recipient<PQResult>,
+    pub persistence: Arc<Persistence>,
+    pub listener: Addr<ListenActor>,
 }
-impl ClientActor {
-    pub fn start(
-        addr: Recipient<PQResult>,
-        persistence: Arc<Persistence>,
-        listener: ListenHandle,
-    ) -> ClientHandle {
-        let (sender, receiver) = mpsc::unbounded_channel();
-        let handle = ClientHandle { sender };
-        let actor = ClientActor {
-            handle: handle.clone(),
-            inputs: receiver,
-            addr,
-            persistence,
-            listener,
-        };
-        tokio::spawn(async move { actor.run().await });
-        handle
-    }
-    async fn run(mut self) {
+impl Actor for ClientActor {
+    type Context = Context<Self>;
+
+    fn started(&mut self, _ctx: &mut Self::Context) {
+        trace!("[ACTOR] starting...");
         self.persistence
             .diagnostics
             .num_connected_clients
             .fetch_add(1, Ordering::SeqCst);
-        trace!("[ACTOR] starting...");
-        while let Some(msg) = self.inputs.recv().await {
-            trace!("[ACTOR] recv {:?}", msg);
-            let resp = match msg {
-                ClientMsg::End => break,
-                ClientMsg::User(req) => self.handle_user(req),
-                ClientMsg::Requery { id, name, params } => self.handle_requery(id, name, params),
-            };
-            if self.addr.try_send(PQResult(resp)).is_err() {
-                break;
-            }
-        }
+    }
+    fn stopped(&mut self, _ctx: &mut Self::Context) {
         trace!("[ACTOR] exiting...");
         self.persistence
             .diagnostics
             .num_connected_clients
             .fetch_sub(1, Ordering::SeqCst);
     }
+}
+impl Handler<ClientMsg> for ClientActor {
+    type Result = ();
 
-    fn handle_user(&mut self, req: api::InteractRequest) -> Result<api::InteractResponse> {
+    fn handle(&mut self, msg: ClientMsg, ctx: &mut Self::Context) {
+        trace!("[ACTOR] recv {:?}", msg);
+        let resp = match msg {
+            ClientMsg::End => return ctx.stop(),
+            ClientMsg::User(req) => self.handle_user(req, ctx.address()),
+            ClientMsg::Requery { id, name, params } => self.handle_requery(id, name, params),
+        };
+        if self.addr.try_send(PQResult(resp)).is_err() {
+            ctx.stop()
+        }
+    }
+}
+impl ClientActor {
+    fn handle_user(&mut self, req: api::InteractRequest, addr: Addr<ClientActor>) -> Result<api::InteractResponse> {
         let id = req.id;
         let req: Interaction = req.try_into()?;
         let rows = match req {
@@ -96,11 +85,9 @@ impl ClientActor {
                     .do_query(name, &mutate.sql_template, &params)?;
                 if !mutate.notify.is_empty() {
                     self.listener
-                        .sender
-                        .send(ListenMsg::Ping {
+                        .try_send(ListenMsg::Ping {
                             paths: mutate.notify.clone(),
-                        })
-                        .unwrap();
+                        }).unwrap();
                 }
                 rows
             }
@@ -112,10 +99,9 @@ impl ClientActor {
                     .ok_or_else(|| anyhow!("no such query: {}", name))?;
                 if !query.listen.is_empty() {
                     self.listener
-                        .sender
-                        .send(ListenMsg::Register {
+                        .try_send(ListenMsg::Register {
                             paths: query.listen.clone(),
-                            handle: self.handle.clone(),
+                            addr,
                             id,
                             name: name.clone(),
                             params: params.clone(),
@@ -157,7 +143,7 @@ impl ClientActor {
 pub enum ListenMsg {
     Register {
         paths: Vec<String>,
-        handle: ClientHandle,
+        addr: Addr<ClientActor>,
         id: i32,
         name: String,
         params: Row,
@@ -166,65 +152,61 @@ pub enum ListenMsg {
         paths: Vec<String>,
     },
 }
-
-#[derive(Clone)]
-pub struct ListenHandle {
-    pub sender: mpsc::UnboundedSender<ListenMsg>,
+impl Message for ListenMsg {
+    type Result = ();
 }
+
+#[derive(Debug, Default)]
 pub struct ListenActor {
-    handle: ListenHandle,
-    inputs: mpsc::UnboundedReceiver<ListenMsg>,
     registry: BTreeMap<String, Vec<Listen>>,
 }
+impl Actor for ListenActor {
+    type Context = Context<Self>;
+    fn started(&mut self, _ctx: &mut Self::Context) {
+        trace!("[LISTEN] starting...");
+    }
+    fn stopped(&mut self, _ctx: &mut Self::Context) {
+        trace!("[LISTEN] exiting...");
+    }
+}
+impl Handler<ListenMsg> for ListenActor {
+    type Result = ();
 
+    fn handle(&mut self, msg: ListenMsg, _ctx: &mut Self::Context) -> Self::Result {
+            trace!("[LISTEN] recv {:?}", msg);
+            match msg {
+                ListenMsg::Register {
+                    paths,
+                    addr,
+                    id,
+                    name,
+                    params,
+                } => self.handle_register(paths, addr, id, name, params),
+                ListenMsg::Ping { paths } => self.handle_ping(paths),
+            }
+    }
+}
+
+#[derive(Debug)]
 pub struct Listen {
-    handle: ClientHandle,
+    addr: Addr<ClientActor>,
     id: i32,
     name: String,
     params: Row,
 }
 
 impl ListenActor {
-    pub fn start() -> ListenHandle {
-        let (sender, receiver) = mpsc::unbounded_channel();
-        let handle = ListenHandle { sender };
-        let actor = ListenActor {
-            handle: handle.clone(),
-            inputs: receiver,
-            registry: BTreeMap::new(),
-        };
-        tokio::spawn(async move { actor.run().await });
-        handle
-    }
-    async fn run(mut self) {
-        trace!("[LISTEN] starting...");
-        while let Some(msg) = self.inputs.recv().await {
-            trace!("[LISTEN] recv {:?}", msg);
-            match msg {
-                ListenMsg::Register {
-                    paths,
-                    handle,
-                    id,
-                    name,
-                    params,
-                } => self.handle_register(paths, handle, id, name, params),
-                ListenMsg::Ping { paths } => self.handle_ping(paths),
-            }
-        }
-        trace!("[LISTEN] exiting...");
-    }
-
     fn handle_register(
         &mut self,
         paths: Vec<String>,
-        handle: ClientHandle,
+        addr: Addr<ClientActor>,
         id: i32,
         name: String,
         params: Row,
     ) {
         for path in paths {
             self.registry.entry(path).or_default().push(Listen {
-                handle: handle.clone(),
+                addr: addr.clone(),
                 id,
                 name: name.clone(),
                 params: params.clone(),
@@ -237,9 +219,8 @@ impl ListenActor {
                 trace!("[LISTEN] notifying {} listens @ {}", listens.len(), path);
                 listens.retain(|listen| {
                     listen
-                        .handle
-                        .sender
-                        .send(ClientMsg::Requery {
+                        .addr
+                        .try_send(ClientMsg::Requery {
                             id: listen.id,
                             name: listen.name.clone(),
                             params: listen.params.clone(),

@@ -6,13 +6,13 @@ use std::{
 
 use dashmap::DashMap;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Diagnostics {
     pub num_connected_clients: AtomicI32,
     pub queries: DashMap<String, QueryDiagnostics>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct QueryDiagnostics {
     pub num_executions: AtomicI64,
 }
