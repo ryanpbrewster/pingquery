@@ -1,7 +1,7 @@
 import Client, { Config } from "./wrapper";
 
 async function main() {
-  const client = new Client("ezdb.fly.dev:10002");
+  const client = new Client("localhost:8080");
   const CONFIG: Config = {
     queries: [
       {
@@ -25,6 +25,9 @@ async function main() {
   await client.init();
   console.log("setting config...");
   await client.setConfig(CONFIG);
+
+  const stream = client.interact();
+  stream.onData((d) => console.log(d));
 }
 
 main().catch((err) => console.error(err));
