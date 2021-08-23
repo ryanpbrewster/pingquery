@@ -51,9 +51,17 @@ impl Actor for ClientActor {
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientActor {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         info!("[WS] incoming: {:?}", msg);
+        let msg = match msg {
+            Ok(msg) => msg,
+            Err(e) => {
+                warn!("[WS] closing because of {}", e);
+                return ctx.close(None);
+            }
+        };
         match msg {
-            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
-            Ok(ws::Message::Text(text)) => {
+            ws::Message::Ping(msg) => ctx.pong(&msg),
+            ws::Message::Close(r) => ctx.close(r),
+            ws::Message::Text(text) => {
                 let req: InteractRequest = match serde_json::from_slice(text.as_bytes()) {
                     Ok(v) => v,
                     Err(e) => {
@@ -63,17 +71,20 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientActor {
                     }
                 };
                 info!("[WS] req: {:?}", req);
-                let resp = self.handle_user(req, ctx.address()).unwrap();
+                let resp = match self.handle_user(req, ctx.address()) {
+                    Ok(resp) => resp,
+                    Err(e) => {
+                        ctx.text(e.to_string());
+                        ctx.close(None);
+                        return;
+                    }
+                };
                 ctx.text(serde_json::to_string(&resp).unwrap());
             }
-            Ok(ws::Message::Close(r)) => {
-                ctx.close(r);
-            }
-            Err(e) => {
-                warn!("[WS] closing because of {}", e);
-                ctx.close(None);
-            }
-            Ok(_) => {}
+            ws::Message::Binary(_)
+            | ws::Message::Continuation(_)
+            | ws::Message::Pong(_)
+            | ws::Message::Nop => {}
         }
     }
 }
