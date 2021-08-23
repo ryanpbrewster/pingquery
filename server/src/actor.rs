@@ -1,3 +1,4 @@
+use actix_web_actors::ws;
 use anyhow::{anyhow, Result};
 use std::{
     collections::BTreeMap,
@@ -6,10 +7,13 @@ use std::{
 };
 
 use crate::{
-    persistence::Persistence, proto::api, requests::Interaction, server::PQResult, value::Row,
+    persistence::Persistence,
+    proto::api::{self, InteractRequest},
+    requests::Interaction,
+    value::Row,
 };
-use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Recipient};
-use log::trace;
+use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, StreamHandler};
+use log::{info, trace, warn};
 
 #[derive(Debug)]
 pub enum ClientMsg {
@@ -23,12 +27,11 @@ impl Message for ClientMsg {
 
 #[derive(Clone, Debug)]
 pub struct ClientActor {
-    pub addr: Recipient<PQResult>,
     pub persistence: Arc<Persistence>,
     pub listener: Addr<ListenActor>,
 }
 impl Actor for ClientActor {
-    type Context = Context<Self>;
+    type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, _ctx: &mut Self::Context) {
         trace!("[ACTOR] starting...");
@@ -45,6 +48,35 @@ impl Actor for ClientActor {
             .fetch_sub(1, Ordering::SeqCst);
     }
 }
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientActor {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        info!("[WS] incoming: {:?}", msg);
+        match msg {
+            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Text(text)) => {
+                let req: InteractRequest = match serde_json::from_slice(text.as_bytes()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        ctx.text(e.to_string());
+                        ctx.close(None);
+                        return;
+                    }
+                };
+                info!("[WS] req: {:?}", req);
+                let resp = self.handle_user(req, ctx.address()).unwrap();
+                ctx.text(serde_json::to_string(&resp).unwrap());
+            }
+            Ok(ws::Message::Close(r)) => {
+                ctx.close(r);
+            }
+            Err(e) => {
+                warn!("[WS] closing because of {}", e);
+                ctx.close(None);
+            }
+            Ok(_) => {}
+        }
+    }
+}
 impl Handler<ClientMsg> for ClientActor {
     type Result = ();
 
@@ -55,8 +87,9 @@ impl Handler<ClientMsg> for ClientActor {
             ClientMsg::User(req) => self.handle_user(req, ctx.address()),
             ClientMsg::Requery { id, name, params } => self.handle_requery(id, name, params),
         };
-        if self.addr.try_send(PQResult(resp)).is_err() {
-            ctx.stop()
+        match resp {
+            Ok(v) => ctx.text(serde_json::to_string(&v).unwrap()),
+            Err(_e) => ctx.close(None),
         }
     }
 }

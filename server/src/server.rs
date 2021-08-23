@@ -1,17 +1,17 @@
 use std::{convert::TryInto, sync::Arc};
 
 use crate::{
-    actor::{ClientActor, ListenActor},
+    actor::ListenActor,
     config::Config,
     persistence::Persistence,
     proto::api::{
         DiagnosticsResponse, ExecRequest, ExecResponse, GetConfigResponse, InitializeRequest,
-        InitializeResponse, InteractResponse, SetConfigRequest, SetConfigResponse,
+        InitializeResponse, SetConfigRequest, SetConfigResponse,
     },
 };
 use anyhow::{anyhow, Result};
 
-use actix::{Addr, Message, Recipient};
+use actix::Addr;
 
 #[derive(Clone)]
 pub struct PingQueryService {
@@ -47,19 +47,4 @@ impl PingQueryService {
     pub async fn exec(&self, request: ExecRequest) -> Result<ExecResponse> {
         self.persistence.exec(request)
     }
-
-    pub fn interact(&self, addr: Recipient<PQResult>) -> ClientActor {
-        let persistence = self.persistence.clone();
-        let listener = self.listener.clone();
-        ClientActor {
-            addr,
-            persistence,
-            listener,
-        }
-    }
-}
-
-pub struct PQResult(pub Result<InteractResponse>);
-impl Message for PQResult {
-    type Result = ();
 }

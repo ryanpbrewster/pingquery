@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use actix::{Actor, Addr, AsyncContext, Handler, StreamHandler};
+use actix::Actor;
 use actix_web::{
     middleware,
     web::{self, Data},
@@ -8,13 +8,13 @@ use actix_web::{
 };
 
 use actix_web_actors::ws;
-use log::{debug, info, warn};
+use log::{debug, info};
 use pingquery::{
-    actor::{ClientActor, ClientMsg, ListenActor},
+    actor::{ClientActor, ListenActor},
     diagnostics::Diagnostics,
     persistence::Persistence,
-    proto::api::{ExecRequest, InitializeRequest, InteractRequest, SetConfigRequest},
-    server::{PQResult, PingQueryService},
+    proto::api::{ExecRequest, InitializeRequest, SetConfigRequest},
+    server::PingQueryService,
 };
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -142,74 +142,12 @@ async fn interact_handler(
     r: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse, Error> {
-    let session = InteractSession {
-        service: service.into_inner(),
-        client: None,
+    let service = service.into_inner();
+    let session = ClientActor {
+        persistence: service.persistence.clone(),
+        listener: service.listener.clone(),
     };
     ws::start(session, &r, stream)
-}
-
-struct InteractSession {
-    service: Arc<PingQueryService>,
-    client: Option<Addr<ClientActor>>,
-}
-
-impl Actor for InteractSession {
-    type Context = ws::WebsocketContext<Self>;
-
-    fn started(&mut self, ctx: &mut Self::Context) {
-        self.client = Some(self.service.interact(ctx.address().recipient()).start());
-    }
-    fn stopping(&mut self, _ctx: &mut Self::Context) -> actix::Running {
-        if let Some(client) = &self.client {
-            let _ = client.try_send(ClientMsg::End);
-        }
-        actix::Running::Stop
-    }
-}
-
-impl Handler<PQResult> for InteractSession {
-    type Result = ();
-    fn handle(&mut self, msg: PQResult, ctx: &mut Self::Context) {
-        match msg.0 {
-            Ok(v) => ctx.text(serde_json::to_string(&v).unwrap()),
-            Err(_e) => ctx.close(None),
-        }
-    }
-}
-
-/// Handler for ws::Message message
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for InteractSession {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        info!("[WS] incoming: {:?}", msg);
-        match msg {
-            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
-            Ok(ws::Message::Text(text)) => {
-                let req: InteractRequest = match serde_json::from_slice(text.as_bytes()) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        ctx.text(e.to_string());
-                        ctx.close(None);
-                        return;
-                    }
-                };
-                info!("[WS] req: {:?}", req);
-                self.client
-                    .as_ref()
-                    .unwrap()
-                    .try_send(ClientMsg::User(req))
-                    .unwrap();
-            }
-            Ok(ws::Message::Close(r)) => {
-                ctx.close(r);
-            }
-            Err(e) => {
-                warn!("[WS] closing because of {}", e);
-                ctx.close(None);
-            }
-            Ok(_) => {}
-        }
-    }
 }
 
 async fn p404() -> HttpResponse {
