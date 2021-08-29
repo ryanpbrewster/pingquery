@@ -6,7 +6,7 @@ const CONFIG: Config = {
     {
       name: "get_counts",
       sql_template: "SELECT * FROM word_counts",
-      listen: [{ segments: [{ type: "lit", value: "all-words" }] }],
+      listen: [{ segments: [] }],
     },
   ],
   mutates: [
@@ -16,7 +16,7 @@ const CONFIG: Config = {
         INSERT INTO word_counts (word, count) VALUES (:word, 1)
         ON CONFLICT (word) DO UPDATE SET count = count + 1
       `,
-      notify: [{ segments: [{ type: "lit", value: "all-words" }] }],
+      notify: [{ segments: [{ type: "var", name: ":word" }] }],
     },
   ],
 };

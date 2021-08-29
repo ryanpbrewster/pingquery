@@ -22,7 +22,7 @@ impl<T> Registree<T> {
         }
         cur.items.push(item);
     }
-    pub fn traverse<S: AsRef<str>>(&mut self, path: &[S], mut f: impl FnMut(&mut Vec<T>) -> ()) {
+    pub fn traverse<S: AsRef<str>>(&mut self, path: &[S], mut f: impl FnMut(&mut Vec<T>)) {
         let mut cur = self;
         for key in path {
             f(&mut cur.items);
@@ -33,7 +33,7 @@ impl<T> Registree<T> {
         }
         cur.traverse_descendents(&mut f);
     }
-    fn traverse_descendents(&mut self, f: &mut impl FnMut(&mut Vec<T>) -> ()) {
+    fn traverse_descendents(&mut self, f: &mut impl FnMut(&mut Vec<T>)) {
         f(&mut self.items);
         for child in self.children.values_mut() {
             child.traverse_descendents(f);

@@ -162,7 +162,7 @@ impl TryFrom<api::Path> for Path {
 
 lazy_static! {
     static ref SEGMENT_LIT: Regex = Regex::new("^([A-Za-z-_]+)$").unwrap();
-    static ref SEGMENT_VAR: Regex = Regex::new("^{([A-Za-z]+)}$").unwrap();
+    static ref SEGMENT_VAR: Regex = Regex::new("^\\{([A-Za-z_:]+)\\}$").unwrap();
 }
 fn segment_from_proto(raw: &str) -> anyhow::Result<Segment> {
     if let Some(m) = SEGMENT_LIT.captures(raw).and_then(|m| m.get(1)) {
@@ -204,5 +204,27 @@ impl TryFrom<api::MutateConfig> for MutateConfig {
                 .map(|p| p.try_into())
                 .collect::<anyhow::Result<_>>()?,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn smoke_test_segment() {
+        let input = vec!["my-lit".to_owned(), "{:my_name}".to_owned()];
+        let parsed: Path = api::Path {
+            segments: input.clone(),
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(
+            parsed.segments,
+            vec![
+                Segment::Lit("my-lit".to_owned()),
+                Segment::Var(":my_name".to_owned())
+            ]
+        );
     }
 }

@@ -6,7 +6,6 @@ use std::{
 };
 
 use crate::{
-    config::Path,
     listen::Registree,
     persistence::Persistence,
     proto::api::{self, InteractRequest},
@@ -66,6 +65,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientActor {
                 let req: InteractRequest = match serde_json::from_slice(text.as_bytes()) {
                     Ok(v) => v,
                     Err(e) => {
+                        warn!("[WS] error: {:?}", e);
                         ctx.text(e.to_string());
                         ctx.close(None);
                         return;
@@ -75,6 +75,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientActor {
                 let resp = match self.handle_user(req, ctx.address()) {
                     Ok(resp) => resp,
                     Err(e) => {
+                        warn!("[WS] error: {:?}", e);
                         ctx.text(e.to_string());
                         ctx.close(None);
                         return;

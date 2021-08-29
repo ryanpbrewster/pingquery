@@ -86,7 +86,7 @@ impl Persistence {
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut conn = self.data.get()?;
         let txn = conn.transaction()?;
-        let rows = do_stmt(&txn, &sql_template, params)?;
+        let rows = do_stmt(&txn, sql_template, params)?;
         txn.commit()?;
         Ok(rows)
     }
@@ -222,7 +222,7 @@ impl<T> FromSql for JsonWrapper<T>
 where
     T: DeserializeOwned,
 {
-    fn column_result<'b>(value: ValueRef<'b>) -> rusqlite::types::FromSqlResult<Self> {
+    fn column_result(value: ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         if let ValueRef::Text(raw) = value {
             return match serde_json::from_slice(raw) {
                 Ok(parsed) => Ok(JsonWrapper(parsed)),
