@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{convert::TryInto, sync::Arc};
 
 use crate::{
-    config::{decode_strings, encode_strings, Config, MutateConfig, QueryConfig},
+    config::{Config, MutateConfig, Path, QueryConfig},
     diagnostics::{Diagnostics, DiagnosticsReport},
-    proto::api::{ExecRequest, ExecResponse},
+    proto::api::{self, ExecRequest, ExecResponse},
     value::{Row, Value},
 };
 
@@ -11,11 +11,12 @@ use log::trace;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{
-    types::{ToSqlOutput, ValueRef},
+    types::{FromSql, FromSqlError, ToSqlOutput, ValueRef},
     ToSql,
 };
 
 use anyhow::{anyhow, Result};
+use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug)]
 pub struct Persistence {
@@ -125,20 +126,22 @@ fn write_tables(txn: &rusqlite::Transaction, config: &Config) -> Result<()> {
     let mut qstmt =
         txn.prepare("INSERT INTO queries (name, sql_template, listen) VALUES (?, ?, ?)")?;
     for query in config.queries.values() {
-        qstmt.execute(&[
+        let params: &[&dyn ToSql] = &[
             &query.name,
             &query.sql_template,
-            &encode_strings(&query.listen),
-        ])?;
+            &wrap_paths(query.listen.clone()),
+        ];
+        qstmt.execute(params)?;
     }
     let mut mstmt =
         txn.prepare("INSERT INTO mutates (name, sql_template, notify) VALUES (?, ?, ?)")?;
     for mutate in config.mutates.values() {
-        mstmt.execute([
+        let params: &[&dyn ToSql] = &[
             &mutate.name,
             &mutate.sql_template,
-            &encode_strings(&mutate.notify),
-        ])?;
+            &wrap_paths(mutate.notify.clone()),
+        ];
+        mstmt.execute(params)?;
     }
     Ok(())
 }
@@ -182,14 +185,14 @@ fn query_from_sql(row: &rusqlite::Row) -> QueryConfig {
     QueryConfig {
         name: row.get_unwrap("name"),
         sql_template: row.get_unwrap("sql_template"),
-        listen: decode_strings(row.get_unwrap("listen")),
+        listen: unwrap_paths(row.get_unwrap("listen")),
     }
 }
 fn mutate_from_sql(row: &rusqlite::Row) -> MutateConfig {
     MutateConfig {
         name: row.get_unwrap("name"),
         sql_template: row.get_unwrap("sql_template"),
-        notify: decode_strings(row.get_unwrap("notify")),
+        notify: unwrap_paths(row.get_unwrap("notify")),
     }
 }
 fn row_from_sql(row: &rusqlite::Row) -> Row {
@@ -204,5 +207,61 @@ impl ToSql for Value {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         let vref: ValueRef = self.into();
         Ok(ToSqlOutput::Borrowed(vref))
+    }
+}
+
+struct JsonWrapper<T>(T);
+impl<T: Serialize> ToSql for JsonWrapper<T> {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(rusqlite::types::Value::Text(
+            serde_json::to_string(&self.0).unwrap(),
+        )))
+    }
+}
+impl<T> FromSql for JsonWrapper<T>
+where
+    T: DeserializeOwned,
+{
+    fn column_result<'b>(value: ValueRef<'b>) -> rusqlite::types::FromSqlResult<Self> {
+        if let ValueRef::Text(raw) = value {
+            return match serde_json::from_slice(raw) {
+                Ok(parsed) => Ok(JsonWrapper(parsed)),
+                Err(err) => Err(FromSqlError::Other(Box::new(err))),
+            };
+        }
+        Err(FromSqlError::InvalidType)
+    }
+}
+
+fn wrap_paths(paths: Vec<Path>) -> JsonWrapper<Vec<api::Path>> {
+    let protos: Vec<api::Path> = paths.into_iter().map(|p| p.into()).collect();
+    JsonWrapper(protos)
+}
+fn unwrap_paths(wrapper: JsonWrapper<Vec<api::Path>>) -> Vec<Path> {
+    wrapper
+        .0
+        .into_iter()
+        .map(|p| p.try_into())
+        .collect::<anyhow::Result<Vec<Path>>>()
+        .unwrap()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::persistence::JsonWrapper;
+
+    #[test]
+    fn json_serde_survives_round_trips() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE json_wrapper (raw TEXT)", [])
+            .unwrap();
+
+        let input: JsonWrapper<Vec<u32>> = JsonWrapper(vec![3, 1, 4]);
+        conn.execute("INSERT INTO json_wrapper (raw) VALUES (?)", [&input])
+            .unwrap();
+        let output: JsonWrapper<Vec<u32>> = conn
+            .query_row("SELECT raw FROM json_wrapper", [], |row| row.get("raw"))
+            .unwrap();
+        assert_eq!(output.0, input.0);
     }
 }

@@ -65,13 +65,13 @@ export interface Config {
 export interface QueryConfig {
   name: string;
   sqlTemplate: string;
-  listen: string[];
+  listen: Path[];
 }
 
 export interface MutateConfig {
   name: string;
   sqlTemplate: string;
-  notify: string[];
+  notify: Path[];
 }
 
 export interface Statement {
@@ -91,6 +91,10 @@ export interface Row {
 export interface Row_ColumnsEntry {
   key: string;
   value: Value | undefined;
+}
+
+export interface Path {
+  segments: string[];
 }
 
 const baseInitializeRequest: object = {};
@@ -408,7 +412,7 @@ export const Config = {
   },
 };
 
-const baseQueryConfig: object = { name: "", sqlTemplate: "", listen: "" };
+const baseQueryConfig: object = { name: "", sqlTemplate: "" };
 
 export const QueryConfig = {
   fromJSON(object: any): QueryConfig {
@@ -422,7 +426,7 @@ export const QueryConfig = {
     }
     if (object.listen !== undefined && object.listen !== null) {
       for (const e of object.listen) {
-        message.listen.push(String(e));
+        message.listen.push(Path.fromJSON(e));
       }
     }
     return message;
@@ -434,7 +438,7 @@ export const QueryConfig = {
     message.sqlTemplate !== undefined &&
       (obj.sqlTemplate = message.sqlTemplate);
     if (message.listen) {
-      obj.listen = message.listen.map((e) => e);
+      obj.listen = message.listen.map((e) => (e ? Path.toJSON(e) : undefined));
     } else {
       obj.listen = [];
     }
@@ -442,7 +446,7 @@ export const QueryConfig = {
   },
 };
 
-const baseMutateConfig: object = { name: "", sqlTemplate: "", notify: "" };
+const baseMutateConfig: object = { name: "", sqlTemplate: "" };
 
 export const MutateConfig = {
   fromJSON(object: any): MutateConfig {
@@ -456,7 +460,7 @@ export const MutateConfig = {
     }
     if (object.notify !== undefined && object.notify !== null) {
       for (const e of object.notify) {
-        message.notify.push(String(e));
+        message.notify.push(Path.fromJSON(e));
       }
     }
     return message;
@@ -468,7 +472,7 @@ export const MutateConfig = {
     message.sqlTemplate !== undefined &&
       (obj.sqlTemplate = message.sqlTemplate);
     if (message.notify) {
-      obj.notify = message.notify.map((e) => e);
+      obj.notify = message.notify.map((e) => (e ? Path.toJSON(e) : undefined));
     } else {
       obj.notify = [];
     }
@@ -566,6 +570,31 @@ export const Row_ColumnsEntry = {
     message.key !== undefined && (obj.key = message.key);
     message.value !== undefined &&
       (obj.value = message.value ? Value.toJSON(message.value) : undefined);
+    return obj;
+  },
+};
+
+const basePath: object = { segments: "" };
+
+export const Path = {
+  fromJSON(object: any): Path {
+    const message = { ...basePath } as Path;
+    message.segments = [];
+    if (object.segments !== undefined && object.segments !== null) {
+      for (const e of object.segments) {
+        message.segments.push(String(e));
+      }
+    }
+    return message;
+  },
+
+  toJSON(message: Path): unknown {
+    const obj: any = {};
+    if (message.segments) {
+      obj.segments = message.segments.map((e) => e);
+    } else {
+      obj.segments = [];
+    }
     return obj;
   },
 };

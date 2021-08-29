@@ -56,13 +56,13 @@ message Config {
 message QueryConfig {
   string name = 1;
   string sql_template = 2;
-  repeated string listen = 3;
+  repeated Path listen = 3;
 }
 
 message MutateConfig {
   string name = 1;
   string sql_template = 2;
-  repeated string notify = 3;
+  repeated Path notify = 3;
 }
 
 message Statement {

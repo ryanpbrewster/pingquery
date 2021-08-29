@@ -103,13 +103,27 @@ export interface Config {
 export interface QueryConfig {
   readonly name: string;
   readonly sql_template: string;
-  readonly listen?: readonly string[];
+  readonly listen?: readonly Path[];
 }
 export interface MutateConfig {
   readonly name: string;
   readonly sql_template: string;
-  readonly notify?: readonly string[];
+  readonly notify?: readonly Path[];
 }
+export interface Path {
+  readonly segments: readonly Segment[];
+}
+namespace path {
+  export interface Lit {
+    readonly type: "lit";
+    readonly value: string;
+  }
+  export interface Var {
+    readonly type: "var";
+    readonly name: string;
+  }
+}
+export type Segment = path.Lit | path.Var;
 
 export interface Diagnostics {
   readonly numConnectedClients: number;
@@ -236,7 +250,7 @@ function queryConfigToProto(q: QueryConfig): api.QueryConfig {
   return {
     name: q.name,
     sqlTemplate: q.sql_template,
-    listen: q.listen ? [...q.listen] : [],
+    listen: q.listen ? q.listen.map((p) => pathToProto(p)) : [],
   };
 }
 
@@ -244,8 +258,22 @@ function mutateConfigToProto(m: MutateConfig): api.MutateConfig {
   return {
     name: m.name,
     sqlTemplate: m.sql_template,
-    notify: m.notify ? [...m.notify] : [],
+    notify: m.notify ? m.notify.map((p) => pathToProto(p)) : [],
   };
+}
+
+function pathToProto(path: Path): api.Path {
+  return {
+    segments: path.segments.map((segment) => segmentToProto(segment)),
+  };
+}
+function segmentToProto(segment: Segment): string {
+  switch (segment.type) {
+    case "lit":
+      return segment.value;
+    case "var":
+      return `{${segment.name}}`;
+  }
 }
 
 function configFromProto(p: api.GetConfigResponse): Config | null {
@@ -259,7 +287,7 @@ function queryConfigFromProto(p: api.QueryConfig): QueryConfig {
   return {
     name: p.name,
     sql_template: p.sqlTemplate,
-    listen: p.listen,
+    listen: p.listen.map((path) => pathFromProto(path)),
   };
 }
 
@@ -267,8 +295,21 @@ function mutateConfigFromProto(p: api.MutateConfig): MutateConfig {
   return {
     name: p.name,
     sql_template: p.sqlTemplate,
-    notify: p.notify,
+    notify: p.notify.map((path) => pathFromProto(path)),
   };
+}
+function pathFromProto(proto: api.Path): Path {
+  return {
+    segments: proto.segments.map((segment) => segmentFromProto(segment)),
+  };
+}
+
+function segmentFromProto(segment: string): Segment {
+  if (segment.startsWith("{") && segment.endsWith("}")) {
+    return { type: "var", name: segment.substring(1, segment.length - 1) };
+  } else {
+    return { type: "lit", value: segment };
+  }
 }
 
 function diagnosticsFromProto(p: api.DiagnosticsResponse): Diagnostics | null {

@@ -1,5 +1,8 @@
 use crate::proto::api;
 use anyhow::anyhow;
+use core::fmt;
+use lazy_static::lazy_static;
+use regex::Regex;
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -15,14 +18,41 @@ pub struct Config {
 pub struct QueryConfig {
     pub name: String,
     pub sql_template: String,
-    pub listen: Vec<String>,
+    pub listen: Vec<Path>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Path {
+    segments: Vec<Segment>,
+}
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+enum Segment {
+    Lit(String),
+    Var(String),
+}
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "/")?;
+        for segment in &self.segments {
+            write!(f, "{}/", segment)?;
+        }
+        Ok(())
+    }
+}
+impl fmt::Display for Segment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Segment::Lit(s) => write!(f, "{}", s),
+            Segment::Var(name) => write!(f, "{{{}}}", name),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct MutateConfig {
     pub name: String,
     pub sql_template: String,
-    pub notify: Vec<String>,
+    pub notify: Vec<Path>,
 }
 
 impl From<Config> for api::Config {
@@ -59,7 +89,14 @@ impl From<QueryConfig> for api::QueryConfig {
         Self {
             name: value.name,
             sql_template: value.sql_template,
-            listen: value.listen,
+            listen: value.listen.into_iter().map(|p| p.into()).collect(),
+        }
+    }
+}
+impl From<Path> for api::Path {
+    fn from(value: Path) -> Self {
+        Self {
+            segments: value.segments.into_iter().map(|s| s.to_string()).collect(),
         }
     }
 }
@@ -78,9 +115,39 @@ impl TryFrom<api::QueryConfig> for QueryConfig {
             } else {
                 value.sql_template
             },
-            listen: value.listen,
+            listen: value
+                .listen
+                .into_iter()
+                .map(|p| p.try_into())
+                .collect::<anyhow::Result<_>>()?,
         })
     }
+}
+impl TryFrom<api::Path> for Path {
+    type Error = anyhow::Error;
+
+    fn try_from(proto: api::Path) -> Result<Self, Self::Error> {
+        let segments = proto
+            .segments
+            .into_iter()
+            .map(|s| segment_from_proto(&s))
+            .collect::<anyhow::Result<_>>()?;
+        Ok(Path { segments })
+    }
+}
+
+lazy_static! {
+    static ref SEGMENT_LIT: Regex = Regex::new("^([A-Za-z-_]+)$").unwrap();
+    static ref SEGMENT_VAR: Regex = Regex::new("^{([A-Za-z]+)}$").unwrap();
+}
+fn segment_from_proto(raw: &str) -> anyhow::Result<Segment> {
+    if let Some(m) = SEGMENT_LIT.captures(raw).and_then(|m| m.get(1)) {
+        return Ok(Segment::Lit(m.as_str().to_owned()));
+    }
+    if let Some(m) = SEGMENT_VAR.captures(raw).and_then(|m| m.get(1)) {
+        return Ok(Segment::Var(m.as_str().to_owned()));
+    }
+    Err(anyhow!("invalid path segment: '{}'", raw))
 }
 
 impl From<MutateConfig> for api::MutateConfig {
@@ -88,7 +155,7 @@ impl From<MutateConfig> for api::MutateConfig {
         Self {
             name: value.name,
             sql_template: value.sql_template,
-            notify: value.notify,
+            notify: value.notify.into_iter().map(|p| p.into()).collect(),
         }
     }
 }
@@ -107,25 +174,11 @@ impl TryFrom<api::MutateConfig> for MutateConfig {
             } else {
                 value.sql_template
             },
-            notify: value.notify,
+            notify: value
+                .notify
+                .into_iter()
+                .map(|p| p.try_into())
+                .collect::<anyhow::Result<_>>()?,
         })
-    }
-}
-
-pub fn encode_strings(xs: &[String]) -> String {
-    serde_json::to_string(xs).unwrap()
-}
-pub fn decode_strings(raw: String) -> Vec<String> {
-    serde_json::from_str(&raw).unwrap()
-}
-
-#[cfg(test)]
-mod test {
-    use crate::config::{decode_strings, encode_strings};
-
-    #[test]
-    fn string_list_encoding_is_bijective() {
-        let xs = vec![];
-        assert_eq!(xs, decode_strings(encode_strings(&xs)));
     }
 }

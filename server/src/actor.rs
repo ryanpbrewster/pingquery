@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::{
+    config::Path,
     persistence::Persistence,
     proto::api::{self, InteractRequest},
     requests::Interaction,
@@ -191,14 +192,14 @@ impl ClientActor {
 #[derive(Debug)]
 pub enum ListenMsg {
     Register {
-        paths: Vec<String>,
+        paths: Vec<Path>,
         addr: Addr<ClientActor>,
         id: i32,
         name: String,
         params: Row,
     },
     Ping {
-        paths: Vec<String>,
+        paths: Vec<Path>,
     },
 }
 impl Message for ListenMsg {
@@ -207,7 +208,8 @@ impl Message for ListenMsg {
 
 #[derive(Debug, Default)]
 pub struct ListenActor {
-    registry: BTreeMap<String, Vec<Listen>>,
+    // TODO(rpb): handle this as a proper tree
+    registry: BTreeMap<Path, Vec<Listen>>,
 }
 impl Actor for ListenActor {
     type Context = Context<Self>;
@@ -247,7 +249,7 @@ pub struct Listen {
 impl ListenActor {
     fn handle_register(
         &mut self,
-        paths: Vec<String>,
+        paths: Vec<Path>,
         addr: Addr<ClientActor>,
         id: i32,
         name: String,
@@ -262,7 +264,7 @@ impl ListenActor {
             });
         }
     }
-    fn handle_ping(&mut self, paths: Vec<String>) {
+    fn handle_ping(&mut self, paths: Vec<Path>) {
         for path in paths {
             if let Some(listens) = self.registry.get_mut(&path) {
                 trace!("[LISTEN] notifying {} listens @ {}", listens.len(), path);
