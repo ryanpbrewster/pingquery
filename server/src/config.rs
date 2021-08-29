@@ -1,4 +1,7 @@
-use crate::proto::api;
+use crate::{
+    proto::api,
+    value::{Row, Value},
+};
 use anyhow::anyhow;
 use core::fmt;
 use lazy_static::lazy_static;
@@ -24,6 +27,27 @@ pub struct QueryConfig {
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Path {
     segments: Vec<Segment>,
+}
+impl Path {
+    pub fn resolve(self, params: &Row) -> anyhow::Result<Vec<String>> {
+        self.segments
+            .into_iter()
+            .map(|s| match s {
+                Segment::Lit(lit) => Ok(lit),
+                Segment::Var(name) => match params.columns.get(&name) {
+                    Some(Value::Text(v)) => Ok(v.clone()),
+                    None => Err(anyhow!(
+                        "could not resolve var segment for {}: no such var",
+                        name
+                    )),
+                    Some(_) => Err(anyhow!(
+                        "could not resolve var segment for {}: non-string value",
+                        name
+                    )),
+                },
+            })
+            .collect()
+    }
 }
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 enum Segment {

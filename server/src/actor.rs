@@ -1,13 +1,13 @@
 use actix_web_actors::ws;
 use anyhow::{anyhow, Result};
 use std::{
-    collections::BTreeMap,
     convert::TryInto,
     sync::{atomic::Ordering, Arc},
 };
 
 use crate::{
     config::Path,
+    listen::Registree,
     persistence::Persistence,
     proto::api::{self, InteractRequest},
     requests::Interaction,
@@ -124,39 +124,43 @@ impl ClientActor {
                     .do_query(name, &query.sql_template, &params)?
             }
             Interaction::Mutate { name, params } => {
-                let config = self.persistence.get_config()?;
+                let mut config = self.persistence.get_config()?;
                 let mutate = config
                     .mutates
-                    .get(&name)
+                    .remove(&name)
                     .ok_or_else(|| anyhow!("no such mutate: {}", name))?;
                 let rows = self
                     .persistence
                     .do_query(name, &mutate.sql_template, &params)?;
                 if !mutate.notify.is_empty() {
-                    self.listener
-                        .try_send(ListenMsg::Ping {
-                            paths: mutate.notify.clone(),
-                        })
-                        .unwrap();
+                    let paths: Vec<Vec<String>> = mutate
+                        .notify
+                        .into_iter()
+                        .map(|p| p.resolve(&params))
+                        .collect::<anyhow::Result<_>>()?;
+                    self.listener.try_send(ListenMsg::Ping { paths }).unwrap();
                 }
                 rows
             }
             Interaction::Listen { name, params } => {
-                let config = self.persistence.get_config()?;
+                let mut config = self.persistence.get_config()?;
                 let query = config
                     .queries
-                    .get(&name)
+                    .remove(&name)
                     .ok_or_else(|| anyhow!("no such query: {}", name))?;
                 if !query.listen.is_empty() {
-                    self.listener
-                        .try_send(ListenMsg::Register {
-                            paths: query.listen.clone(),
-                            addr,
-                            id,
-                            name: name.clone(),
-                            params: params.clone(),
-                        })
-                        .unwrap();
+                    let paths: Vec<Vec<String>> = query
+                        .listen
+                        .into_iter()
+                        .map(|p| p.resolve(&params))
+                        .collect::<anyhow::Result<_>>()?;
+                    self.listener.try_send(ListenMsg::Register {
+                        paths,
+                        addr,
+                        id,
+                        name: name.clone(),
+                        params: params.clone(),
+                    })?;
                 }
                 self.persistence
                     .do_query(name, &query.sql_template, &params)?
@@ -192,14 +196,14 @@ impl ClientActor {
 #[derive(Debug)]
 pub enum ListenMsg {
     Register {
-        paths: Vec<Path>,
+        paths: Vec<Vec<String>>,
         addr: Addr<ClientActor>,
         id: i32,
         name: String,
         params: Row,
     },
     Ping {
-        paths: Vec<Path>,
+        paths: Vec<Vec<String>>,
     },
 }
 impl Message for ListenMsg {
@@ -208,8 +212,7 @@ impl Message for ListenMsg {
 
 #[derive(Debug, Default)]
 pub struct ListenActor {
-    // TODO(rpb): handle this as a proper tree
-    registry: BTreeMap<Path, Vec<Listen>>,
+    registry: Registree<Listen>,
 }
 impl Actor for ListenActor {
     type Context = Context<Self>;
@@ -249,25 +252,28 @@ pub struct Listen {
 impl ListenActor {
     fn handle_register(
         &mut self,
-        paths: Vec<Path>,
+        paths: Vec<Vec<String>>,
         addr: Addr<ClientActor>,
         id: i32,
         name: String,
         params: Row,
     ) {
         for path in paths {
-            self.registry.entry(path).or_default().push(Listen {
-                addr: addr.clone(),
-                id,
-                name: name.clone(),
-                params: params.clone(),
-            });
+            self.registry.insert(
+                path,
+                Listen {
+                    addr: addr.clone(),
+                    id,
+                    name: name.clone(),
+                    params: params.clone(),
+                },
+            );
         }
     }
-    fn handle_ping(&mut self, paths: Vec<Path>) {
+    fn handle_ping(&mut self, paths: Vec<Vec<String>>) {
         for path in paths {
-            if let Some(listens) = self.registry.get_mut(&path) {
-                trace!("[LISTEN] notifying {} listens @ {}", listens.len(), path);
+            self.registry.traverse(&path, |listens| {
+                trace!("[LISTEN] notifying {} listens @ {:?}", listens.len(), path);
                 listens.retain(|listen| {
                     listen
                         .addr
@@ -279,7 +285,7 @@ impl ListenActor {
                         .is_ok()
                 });
                 trace!("[LISTEN] successfully notified {}", listens.len());
-            }
+            });
         }
     }
 }

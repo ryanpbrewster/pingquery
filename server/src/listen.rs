@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+#[derive(Debug)]
 pub struct Registree<T> {
     items: Vec<T>,
     children: BTreeMap<String, Registree<T>>,
@@ -21,11 +22,11 @@ impl<T> Registree<T> {
         }
         cur.items.push(item);
     }
-    pub fn traverse(&mut self, path: &[&str], mut f: impl FnMut(&mut Vec<T>) -> ()) {
+    pub fn traverse<S: AsRef<str>>(&mut self, path: &[S], mut f: impl FnMut(&mut Vec<T>) -> ()) {
         let mut cur = self;
-        for &key in path {
+        for key in path {
             f(&mut cur.items);
-            cur = match cur.children.get_mut(key) {
+            cur = match cur.children.get_mut(key.as_ref()) {
                 Some(child) => child,
                 None => return,
             };
