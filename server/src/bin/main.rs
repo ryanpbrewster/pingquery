@@ -39,8 +39,11 @@ async fn main() -> anyhow::Result<()> {
     info!("listening @ {}", addr);
     HttpServer::new(move || {
         App::new()
-            // enable logger
             .wrap(middleware::Logger::default())
+            .service(
+                web::resource("/")
+                    .route(web::get().to(health_check_handler)),
+            )
             .service(
                 web::resource("/diagnostics")
                     .app_data(Data::new(service.clone()))
@@ -74,6 +77,10 @@ async fn main() -> anyhow::Result<()> {
     .await?;
 
     Ok(())
+}
+
+async fn health_check_handler() -> HttpResponse {
+    HttpResponse::Ok().body("ok\n")
 }
 
 async fn initialize_handler(
