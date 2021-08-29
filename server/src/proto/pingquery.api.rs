@@ -158,3 +158,10 @@ pub struct Row {
     #[serde(default)]
     pub columns: ::std::collections::HashMap<::prost::alloc::string::String, Value>,
 }
+#[derive(::serde::Serialize, ::serde::Deserialize)] #[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Path {
+    #[prost(string, repeated, tag="1")]
+    #[serde(default)]
+    pub segments: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}

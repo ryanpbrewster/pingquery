@@ -78,3 +78,7 @@ message Value {
 message Row {
   map<string, Value> columns = 1;
 }
+
+message Path {
+  repeated string segments = 1;
+}
