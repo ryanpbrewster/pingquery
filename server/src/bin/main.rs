@@ -40,10 +40,7 @@ async fn main() -> anyhow::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .service(
-                web::resource("/")
-                    .route(web::get().to(health_check_handler)),
-            )
+            .service(web::resource("/").route(web::get().to(health_check_handler)))
             .service(
                 web::resource("/diagnostics")
                     .app_data(Data::new(service.clone()))
