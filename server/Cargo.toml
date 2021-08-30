@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1"
 actix= "0.10"
+actix-cors = "0.5"
 actix-web = "3"
 actix-web-actors = "3"
 dashmap = "4"

@@ -40,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
+            .wrap(actix_cors::Cors::permissive())
             .service(web::resource("/").route(web::get().to(health_check_handler)))
             .service(
                 web::resource("/diagnostics")
