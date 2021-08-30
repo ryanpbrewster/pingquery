@@ -80,17 +80,20 @@
         console.log(`[RPB] input: `, evt.target.value);
         evt.preventDefault();
         eAdmin.disabled = true;
-        const resp = await fetch("https://ezdb.fly.dev/exec", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({rawSql: evt.target.value}),
-        });
-        console.log(await resp.json());
-        eAdmin.value = '';
-        eAdmin.disabled = false;
-        eAdmin.focus();
+        try {
+          const resp = await fetch("https://ezdb.fly.dev/exec", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({rawSql: evt.target.value}),
+          });
+          console.log(await resp.json());
+        } finally {
+          eAdmin.value = '';
+          eAdmin.disabled = false;
+          eAdmin.focus();
+        }
       }
     });
 
