@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ezdb</title>
+  <style media="screen">
+    body {
+      display: flex;
+    }
+    #admin {
+      width: 640px;
+      height: 480px;
+    }
+    #listen {
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+  <script>
+  async function initialize() {
+    await fetch("https://ezdb.fly.dev/initialize", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    await fetch("https://ezdb.fly.dev/config", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        config: {
+          queries: [{
+            name: "get_counts",
+            sqlTemplate: "SELECT * FROM word_counts ORDER BY count DESC",
+            listen: [{ segments: [] }],
+          }],
+        },
+      }),
+    });
+    await fetch("https://ezdb.fly.dev/exec", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        rawSql: `CREATE TABLE IF NOT EXISTS word_counts (
+          word TEXT PRIMARY KEY,
+          count INTEGER NOT NULL
+        )`,
+      }),
+    });
+  }
+  document.addEventListener("DOMContentLoaded", async () => {
+    await initialize();
+    const socket = await new Promise((resolve, reject) => {
+      const s = new WebSocket("wss://ezdb.fly.dev/interact");
+      s.onopen = () => {
+        console.log(`[WS] opened @ ${new Date()}`);
+        resolve(s);
+      };
+    });
+    socket.onmessage = (data) => {
+      console.log(`[WS] recv: `, data);
+    };
+    socket.onerror = (err) => {
+      console.error(`[WS} error: `, err);
+    };
+    socket.onclose = () => {
+      console.error(`[WS] closed @ ${new Date()}`);
+    };
+    socket.send(JSON.stringify({id: 1, query: {name: "get_counts"}}));
+
+    const eListen = document.getElementById("listen");
+    const eAdmin = document.getElementById("admin");
+    eAdmin.addEventListener("keydown", async (evt) => {
+      if (evt.key === 'Enter' && !evt.shiftKey) {
+        console.log(`[RPB] input: `, evt.target.value);
+        evt.preventDefault();
+        eAdmin.disabled = true;
+        const resp = await fetch("https://ezdb.fly.dev/exec", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({rawSql: evt.target.value}),
+        });
+        console.log(await resp.json());
+        eAdmin.value = '';
+        eAdmin.disabled = false;
+        eAdmin.focus();
+      }
+    });
+
+  });
+  </script>
+</head>
+<body>
+  <div id="listen">
+  </div>
+  <div id="admin-wrap">
+    <textarea id="admin"></textarea>
+  </div>
+</body>
+</html>
