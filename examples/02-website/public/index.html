@@ -46,7 +46,7 @@
         const socket = await new Promise((resolve, reject) => {
           const s = new WebSocket("wss://ezdb.fly.dev/interact");
           s.onopen = () => {
-            console.log(`[WS] opened @ ${new Date()}`);
+            console.log(`[WS] [${window.performance.now()}] opened`);
             resolve(s);
           };
         });

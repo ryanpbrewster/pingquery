@@ -42,7 +42,7 @@ impl Actor for ClientActor {
             .diagnostics
             .num_connected_clients
             .fetch_add(1, Ordering::SeqCst);
-        ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
+        ctx.run_interval(HEARTBEAT_INTERVAL, |_act, ctx| {
             ctx.ping(b"");
         });
     }
