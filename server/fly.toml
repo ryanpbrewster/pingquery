@@ -11,6 +11,10 @@ kill_timeout = 5
   allowed_public_ports = []
   auto_rollback = true
 
+[mounts]
+source="ezdb_1"
+destination="/ezdb-data"
+
 [[services]]
   http_checks = []
   internal_port = 8080

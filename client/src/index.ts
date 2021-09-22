@@ -32,7 +32,9 @@ async function main() {
 
   console.log("setting up stream...");
   const stream = client.interact();
-  stream.onData((d) => console.log(d));
+  stream.onData((d) =>
+    console.log(`[${performance.now()}] ${JSON.stringify(d)}`)
+  );
 
   stream.send({ id: 1, type: "listen", name: "get_counts" });
 

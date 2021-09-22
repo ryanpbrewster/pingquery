@@ -15,4 +15,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/app .
 ENV RUST_LOG "app=info,pingquery=trace"
 EXPOSE 50051
-ENTRYPOINT ["./app"]
+ENTRYPOINT ["./app", "--data=/ezdb-data/data.sql", "--metadata=/ezdb-data/metadata.sql"]
