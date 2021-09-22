@@ -1,110 +1,111 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>ezdb</title>
-  <style media="screen">
-    body {
-      display: flex;
-    }
-    #admin {
-      width: 640px;
-      height: 480px;
-    }
-    #listen {
-      display: flex;
-      flex-direction: column;
-    }
-  </style>
-  <script>
-  async function initialize() {
-    await fetch("https://ezdb.fly.dev/initialize", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({}),
-    });
-    await fetch("https://ezdb.fly.dev/config", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        config: {
-          queries: [{
-            name: "get_counts",
-            sqlTemplate: "SELECT * FROM word_counts ORDER BY count DESC",
-            listen: [{ segments: [] }],
-          }],
-        },
-      }),
-    });
-    await fetch("https://ezdb.fly.dev/exec", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        rawSql: `CREATE TABLE IF NOT EXISTS word_counts (
-          word TEXT PRIMARY KEY,
-          count INTEGER NOT NULL
-        )`,
-      }),
-    });
-  }
-  document.addEventListener("DOMContentLoaded", async () => {
-    await initialize();
-    const socket = await new Promise((resolve, reject) => {
-      const s = new WebSocket("wss://ezdb.fly.dev/interact");
-      s.onopen = () => {
-        console.log(`[WS] opened @ ${new Date()}`);
-        resolve(s);
-      };
-    });
-    socket.onmessage = (data) => {
-      console.log(`[WS] recv: `, data);
-    };
-    socket.onerror = (err) => {
-      console.error(`[WS} error: `, err);
-    };
-    socket.onclose = () => {
-      console.error(`[WS] closed @ ${new Date()}`);
-    };
-    socket.send(JSON.stringify({id: 1, query: {name: "get_counts"}}));
-
-    const eListen = document.getElementById("listen");
-    const eAdmin = document.getElementById("admin");
-    eAdmin.addEventListener("keydown", async (evt) => {
-      if (evt.key === 'Enter' && !evt.shiftKey) {
-        console.log(`[RPB] input: `, evt.target.value);
-        evt.preventDefault();
-        eAdmin.disabled = true;
-        try {
-          const resp = await fetch("https://ezdb.fly.dev/exec", {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({rawSql: evt.target.value}),
-          });
-          console.log(await resp.json());
-        } finally {
-          eAdmin.value = '';
-          eAdmin.disabled = false;
-          eAdmin.focus();
-        }
+  <head>
+    <meta charset="utf-8" />
+    <title>ezdb</title>
+    <style media="screen">
+      body {
+        display: flex;
+        flex-direction: column;
       }
-    });
+      #listen {
+        display: table;
+        width: 640px;
+        border: 1px solid black;
+        border-collapse: collapse;
+      }
+      #listen td {
+        border-right: 1px solid black;
+        border-left: 1px solid black;
+      }
+      #add-word {
+        width: 320px;
+        height: 240px;
+        margin-top: 16px;
+      }
+    </style>
+    <script>
+      document.addEventListener("DOMContentLoaded", async () => {
+        const eListen = document.getElementById("listen");
+        const eAddWord = document.getElementById("add-word");
+        function setWordCounts(rows) {
+          while (eListen.firstChild) {
+            eListen.removeChild(eListen.firstChild);
+          }
+          for (const row of rows) {
+            const eRow = document.createElement("tr");
+            const eWord = document.createElement("td");
+            eWord.innerText = row.columns["word"].text;
+            const eCount = document.createElement("td");
+            eCount.innerText = row.columns["count"].integer;
+            eRow.appendChild(eWord);
+            eRow.appendChild(eCount);
+            eListen.appendChild(eRow);
+          }
+        }
+        const socket = await new Promise((resolve, reject) => {
+          const s = new WebSocket("wss://ezdb.fly.dev/interact");
+          s.onopen = () => {
+            console.log(`[WS] opened @ ${new Date()}`);
+            resolve(s);
+          };
+        });
+        socket.onmessage = ({ data }) => {
+          console.log(`[WS] [${window.performance.now()}] recv: `, data);
+          try {
+            const msg = JSON.parse(data);
+            if (msg.id === 1) {
+              setWordCounts(msg.rows);
+            }
+          } catch (e) {
+            console.error(`[WS] could not parse ${data}`, e);
+          }
+        };
+        socket.onerror = (err) => {
+          console.error(`[WS] [${window.performance.now()}] error: `, err);
+        };
+        socket.onclose = () => {
+          console.log(`[WS] [${window.performance.now()}] closed`);
+        };
+        socket.send(JSON.stringify({ id: 1, listen: { name: "get_counts" } }));
 
-  });
-  </script>
-</head>
-<body>
-  <div id="listen">
-  </div>
-  <div id="admin-wrap">
-    <textarea id="admin"></textarea>
-  </div>
-</body>
+        let requestIdx = 2;
+        eAddWord.addEventListener("keydown", async (evt) => {
+          if (evt.key === "Enter" && !evt.shiftKey) {
+            evt.preventDefault();
+            eAddWord.disabled = true;
+            try {
+              const resp = await socket.send(
+                JSON.stringify({
+                  id: requestIdx++,
+                  mutate: {
+                    name: "add_word",
+                    params: {
+                      columns: { ":word": { text: evt.target.value } },
+                    },
+                  },
+                })
+              );
+            } finally {
+              eAddWord.value = "";
+              eAddWord.disabled = false;
+              eAddWord.focus();
+            }
+          }
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <p>
+      The table below is generated (and kept up-to-date in realtime) by a SQL query like
+      <pre>
+        SELECT word, count FROM word_counts ORDER BY count DESC
+      </pre>
+    </p>
+    <table id="listen"></table>
+    <div id="add-word-wrap">
+      <textarea id="add-word" placeholder="any word"></textarea>
+    </div>
+  </body>
 </html>
