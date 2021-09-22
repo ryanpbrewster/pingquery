@@ -1,6 +1,6 @@
 import Client, { Config, Deferred, InteractResponse } from "./wrapper";
 
-const client = new Client("localhost:8080");
+const client = new Client("ezdb.fly.dev");
 const CONFIG: Config = {
   queries: [
     {

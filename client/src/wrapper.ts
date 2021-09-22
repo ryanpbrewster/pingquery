@@ -57,12 +57,14 @@ class InteractWrapper {
     });
     socket.on("message", (data) => {
       const msg = (data as Buffer).toString();
-      // console.log("[RECV]", msg);
-      this.dataCb(
-        interactResponseFromProto(
-          api.InteractResponse.fromJSON(JSON.parse(msg))
-        )
-      );
+      try {
+        const parsed = JSON.parse(msg);
+        this.dataCb(
+          interactResponseFromProto(api.InteractResponse.fromJSON(parsed))
+        );
+      } catch (e) {
+        console.error("[RECV]", msg);
+      }
     });
     socket.on("error", (err) => {
       // console.error(err);
