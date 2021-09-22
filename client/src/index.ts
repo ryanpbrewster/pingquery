@@ -6,7 +6,7 @@ async function main() {
     queries: [
       {
         name: "get_counts",
-        sql_template: "SELECT * FROM word_counts",
+        sql_template: "SELECT * FROM word_counts ORDER BY count DESC",
         listen: [{ segments: [] }],
       },
     ],

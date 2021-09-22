@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 use std::{
     convert::TryInto,
     sync::{atomic::Ordering, Arc},
+    time::Duration,
 };
 
 use crate::{
@@ -25,6 +26,8 @@ impl Message for ClientMsg {
     type Result = ();
 }
 
+/// How often heartbeat pings are sent
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 #[derive(Clone, Debug)]
 pub struct ClientActor {
     pub persistence: Arc<Persistence>,
@@ -33,12 +36,15 @@ pub struct ClientActor {
 impl Actor for ClientActor {
     type Context = ws::WebsocketContext<Self>;
 
-    fn started(&mut self, _ctx: &mut Self::Context) {
+    fn started(&mut self, ctx: &mut Self::Context) {
         trace!("[ACTOR] starting...");
         self.persistence
             .diagnostics
             .num_connected_clients
             .fetch_add(1, Ordering::SeqCst);
+        ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
+            ctx.ping(b"");
+        });
     }
     fn stopped(&mut self, _ctx: &mut Self::Context) {
         trace!("[ACTOR] exiting...");
