@@ -25,7 +25,52 @@
       }
     </style>
     <script>
+      const CONFIG = {
+        queries: [
+          {
+            name: "get_counts",
+            sqlTemplate: "SELECT * FROM word_counts ORDER BY count DESC",
+            listen: [{ segments: [] }],
+          },
+        ],
+        mutates: [
+          {
+            name: "add_word",
+            sqlTemplate: `
+              INSERT INTO word_counts (word, count)
+              VALUES (:word, 1)
+              ON CONFLICT (word)
+              DO UPDATE SET count = count + 1
+            `.trim().split('\n').map((line) => line.trim()).join(' '),
+            notify: [{ segments: ["{:word}"] }],
+          },
+        ],
+      };
+      const ROOT = 'https://ezdb.fly.dev';
+      async function doPost(path, body) {
+        await fetch(`${ROOT}/${path}`, {
+          method: 'POST',
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+      }
+    </script>
+    <script>
       document.addEventListener("DOMContentLoaded", async () => {
+        const eConfig = document.getElementById("config");
+        eConfig.value = JSON.stringify(CONFIG, null, 2);
+        const eResetConfig = document.getElementById("reset-config");
+        eResetConfig.addEventListener("click", async (evt) => {
+          await doPost("initialize", {});
+          await doPost('exec', {
+            rawSql: `CREATE TABLE IF NOT EXISTS word_counts (word TEXT PRIMARY KEY, count INTEGER NOT NULL)`,
+          });
+          await doPost("config", {config: CONFIG});
+        });
+
+
         const eListen = document.getElementById("listen");
         const eAddWord = document.getElementById("add-word");
         function setWordCounts(rows) {
@@ -106,6 +151,12 @@
     <table id="listen"></table>
     <div id="add-word-wrap">
       <textarea id="add-word" placeholder="any word"></textarea>
+    </div>
+    <p>The database is configured as follows:</p>
+    <div id="config-wrap">
+      <textarea id="config" rows="26" cols="130" disabled></textarea>
+      <br>
+      <button id="reset-config">Reset Config</button>
     </div>
   </body>
 </html>
